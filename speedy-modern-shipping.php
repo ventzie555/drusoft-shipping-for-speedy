@@ -144,24 +144,238 @@ function speedy_modern_enqueue_scripts(): void {
 }
 
 /**
+ * Enqueue admin scripts for the WooCommerce shipping zones page.
+ *
+ * Loads a script that auto-reopens the settings modal after saving
+ * credentials for the first time, so the user sees the unlocked fields.
+ *
+ * @return void
+ */
+add_action( 'admin_enqueue_scripts', 'speedy_modern_enqueue_admin_scripts' );
+function speedy_modern_enqueue_admin_scripts( $hook ): void {
+	// Only load on the WooCommerce shipping settings page
+	if ( 'woocommerce_page_wc-settings' !== $hook ) {
+		return;
+	}
+
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	$tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : '';
+	if ( 'shipping' !== $tab ) {
+		return;
+	}
+
+	// Determine if credentials are already saved (for any instance)
+	// We check the global option key that WooCommerce uses for instance settings
+	global $wpdb;
+	$has_credentials = false;
+	$option_like     = 'woocommerce_speedy_modern_%_settings';
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$rows = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT 10",
+			$option_like
+		)
+	);
+
+	if ( $rows ) {
+		foreach ( $rows as $row ) {
+			$settings = maybe_unserialize( $row->option_value );
+			if ( is_array( $settings ) && ! empty( $settings['speedy_username'] ) && ! empty( $settings['speedy_password'] ) ) {
+				$has_credentials = true;
+				break;
+			}
+		}
+	}
+
+	wp_enqueue_script(
+		'speedy-modern-admin-shipping',
+		SPEEDY_MODERN_URL . 'assets/js/admin-shipping-zone.js',
+		array( 'jquery' ),
+		'1.0.0',
+		true
+	);
+
+	wp_localize_script( 'speedy-modern-admin-shipping', 'speedy_modern_admin', array(
+		'has_credentials'          => $has_credentials ? '1' : '0',
+		'i18n_correct_credentials' => __( 'Please correct your credentials and save again.', 'speedy-modern' ),
+	) );
+
+	// Enqueue the settings script for dynamic field visibility
+	wp_enqueue_style( 'speedy-modern-admin-settings', SPEEDY_MODERN_URL . 'assets/css/admin-settings.css', array(), '1.0.0' );
+	wp_enqueue_script(
+		'speedy-modern-admin-settings',
+		SPEEDY_MODERN_URL . 'assets/js/admin-settings.js',
+		array( 'jquery', 'select2' ),
+		'1.0.0',
+		true
+	);
+}
+
+/**
  * Background Job Listeners
  * This connects the scheduled event to the actual logic.
  */
 add_action( 'speedy_modern_sync_locations_event', array( 'Speedy_Modern_Syncer', 'sync' ) );
 
 /**
- * Reschedule sync when settings are saved.
+ * Get city name by its ID from our local database.
  *
- * @return void
+ * @param int $city_id The Speedy city ID.
+ * @return string The city name or an empty string if not found.
  */
-add_action( 'woocommerce_update_options_shipping_speedy_modern', 'speedy_modern_trigger_sync_on_save' );
-function speedy_modern_trigger_sync_on_save(): void {
-    if ( function_exists( 'as_schedule_single_action' ) ) {
-        // Cancel any pending sync to avoid duplicates
-        if ( function_exists( 'as_unschedule_action' ) ) {
-            as_unschedule_action( 'speedy_modern_sync_locations_event' );
-        }
-        // Schedule new sync immediately
-        as_schedule_single_action( time(), 'speedy_modern_sync_locations_event' );
-    }
+function speedy_modern_get_city_name_by_id( $city_id ) {
+	if ( ! $city_id ) {
+		return '';
+	}
+
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'speedy_cities';
+	
+	$city_name = $wpdb->get_var(
+		$wpdb->prepare(
+			"SELECT name FROM {$table_name} WHERE id = %d",
+			$city_id
+		)
+	);
+
+	// Fallback: If name is not found (e.g. sync hasn't run), return the ID so the field isn't blank.
+	return $city_name ? $city_name : $city_id;
+}
+
+/**
+ * AJAX Handler for searching cities via Speedy API.
+ * Used by Select2 in admin settings.
+ */
+add_action( 'wp_ajax_speedy_modern_search_cities', 'speedy_modern_search_cities' );
+function speedy_modern_search_cities() {
+	// Check permissions
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( 'Permission denied' );
+	}
+
+	$term = isset( $_GET['term'] ) ? sanitize_text_field( $_GET['term'] ) : '';
+	if ( empty( $term ) ) {
+		wp_send_json_success( [] );
+	}
+
+	// We need credentials to query the API.
+	// Since this is a global AJAX handler, we need to find *some* valid credentials.
+	// We'll try to get them from the first configured instance.
+	global $wpdb;
+	$username = '';
+	$password = '';
+	
+	$option_like = 'woocommerce_speedy_modern_%_settings';
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$rows = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT 1",
+			$option_like
+		)
+	);
+
+	if ( $rows ) {
+		$settings = maybe_unserialize( $rows[0]->option_value );
+		if ( is_array( $settings ) ) {
+			$username = $settings['speedy_username'] ?? '';
+			$password = $settings['speedy_password'] ?? '';
+		}
+	}
+
+	if ( empty( $username ) || empty( $password ) ) {
+		wp_send_json_error( 'No API credentials found.' );
+	}
+
+	// Call Speedy API
+	$body = json_encode( [
+		'userName' => $username,
+		'password' => $password,
+		'language' => 'BG',
+		'countryId' => 100, // Bulgaria
+		'name'     => $term,
+	] );
+
+	$response = wp_remote_post( 'https://api.speedy.bg/v1/location/site', [
+		'headers' => [ 'Content-Type' => 'application/json' ],
+		'body'    => $body,
+		'timeout' => 10,
+	] );
+
+	if ( is_wp_error( $response ) ) {
+		wp_send_json_error( $response->get_error_message() );
+	}
+
+	$data = json_decode( wp_remote_retrieve_body( $response ), true );
+	$results = [];
+
+	if ( isset( $data['sites'] ) && is_array( $data['sites'] ) ) {
+		foreach ( $data['sites'] as $site ) {
+			// Format: "Sofia, Stolichna"
+			$label = $site['name'];
+			if ( ! empty( $site['municipality'] ) ) {
+				$label .= ', ' . $site['municipality'];
+			}
+			
+			$results[] = [
+				'id'   => $site['id'], 
+				'text' => $label
+			];
+		}
+	}
+
+	wp_send_json( [ 'results' => $results ] ); // Select2 v4+ expects results in a 'results' key
+}
+
+/**
+ * AJAX Handler for file uploads in admin settings.
+ */
+add_action( 'wp_ajax_speedy_modern_upload_file', 'speedy_modern_upload_file' );
+function speedy_modern_upload_file() {
+	// Check permissions
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( 'Permission denied' );
+	}
+
+	if ( ! isset( $_FILES['file'] ) || empty( $_FILES['file']['name'] ) ) {
+		wp_send_json_error( 'No file uploaded.' );
+	}
+
+	$file = $_FILES['file'];
+
+	// Check for upload errors
+	if ( $file['error'] !== UPLOAD_ERR_OK ) {
+		wp_send_json_error( 'Upload error: ' . $file['error'] );
+	}
+
+	// Validate file type (CSV)
+	$file_type = wp_check_filetype( $file['name'] );
+	if ( 'csv' !== $file_type['ext'] ) {
+		wp_send_json_error( 'Invalid file type. Please upload a CSV file.' );
+	}
+
+	// Define upload directory
+	$upload_dir = wp_upload_dir();
+	$target_dir = $upload_dir['basedir'] . '/speedy_shipping/';
+	
+	// Create directory if it doesn't exist
+	if ( ! file_exists( $target_dir ) ) {
+		wp_mkdir_p( $target_dir );
+	}
+
+	// Use sanitized original filename
+	$filename = sanitize_file_name( $file['name'] );
+	$target_file = $target_dir . $filename;
+
+	// Move uploaded file
+	if ( move_uploaded_file( $file['tmp_name'], $target_file ) ) {
+		// Also update the global option if needed for backward compatibility or easy access
+		update_option( 'speedy_fileceni_path', $target_file );
+		
+		wp_send_json_success( [ 
+			'path' => $target_file,
+			'name' => basename( $target_file )
+		] );
+	} else {
+		wp_send_json_error( 'Failed to move uploaded file.' );
+	}
 }

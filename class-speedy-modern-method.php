@@ -33,6 +33,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 		 */
 		public function init(): void {
 			// Load the settings API
+			$this->init_instance_settings();
 			$this->init_form_fields();
 			$this->init_settings();
 
@@ -45,21 +46,190 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 
 		/**
 		 * Processes and saves shipping method options in the admin area.
-		 * We override this to clear our API cache immediately after saving.
+		 *
+		 * Validates credentials against the Speedy API BEFORE saving.
+		 * If invalid, only the basic fields are kept and the credentials are cleared.
 		 */
 		public function process_admin_options(): bool {
-			$saved = parent::process_admin_options(); // Save the fields to the database
 
-			$this->clear_speedy_cache(); // Clear the API transients
+			// Get the posted data before saving
+			$post_data = $this->get_post_data();
+			$file_field_key = $this->get_field_key( 'fileceni' );
+
+			// Check if a file path was submitted via the hidden input (AJAX upload)
+			if ( ! empty( $post_data[ $file_field_key ] ) ) {
+				// Sanitize the path
+				$post_data[ $file_field_key ] = sanitize_text_field( $post_data[ $file_field_key ] );
+			} 
+			// Preserve existing value if nothing new is provided
+			else {
+				$existing_path = $this->get_option( 'fileceni' );
+				if ( $existing_path ) {
+					$post_data[ $file_field_key ] = $existing_path;
+				}
+			}
+			
+			// Update the post data with the resolved file path
+			$this->set_post_data( $post_data );
+
+
+			// Extract the credentials that the user just submitted
+			$field_key_user = $this->get_field_key( 'speedy_username' );
+			$field_key_pass = $this->get_field_key( 'speedy_password' );
+
+			$new_username = isset( $post_data[ $field_key_user ] ) ? sanitize_text_field( $post_data[ $field_key_user ] ) : '';
+			$new_password = isset( $post_data[ $field_key_pass ] ) ? sanitize_text_field( $post_data[ $field_key_pass ] ) : '';
+
+			// Validate credentials BEFORE saving anything
+			if ( $new_username && $new_password ) {
+				$validation = $this->validate_speedy_credentials( $new_username, $new_password );
+
+				if ( is_wp_error( $validation ) ) {
+					$error_message = sprintf(
+						/* translators: %s: error message from the Speedy API */
+						__( 'Speedy API authentication failed: %s', 'speedy-modern' ),
+						$validation->get_error_message()
+					);
+
+					$this->add_error(
+						$error_message . ' ' . __( 'Credentials have been cleared.', 'speedy-modern' )
+					);
+
+					// Blank out the credentials in the post data so they save as empty
+					$post_data[ $field_key_user ] = '';
+					$post_data[ $field_key_pass ] = '';
+					$this->set_post_data( $post_data );
+
+					// Strip authenticated fields so their values don't get saved
+					$basic_keys = [ 'section_api', 'enabled', 'title', 'speedy_username', 'speedy_password', 'info_msg' ];
+					$this->instance_form_fields = array_intersect_key(
+						$this->instance_form_fields,
+						array_flip( $basic_keys )
+					);
+
+					// Now let parent save only the basic (credential) fields
+					$saved = parent::process_admin_options();
+
+					// The parent's init_instance_settings() loaded ALL old values from the DB.
+					// Even though we stripped instance_form_fields, stale authenticated
+					// field values remain in instance_settings and were written back.
+					// Clean them out now by keeping only the basic keys.
+					$option_key      = $this->get_instance_option_key();
+					$saved_settings  = get_option( $option_key, [] );
+					$clean_settings  = array_intersect_key( $saved_settings, array_flip( $basic_keys ) );
+					update_option( $option_key, $clean_settings, 'yes' );
+
+					$this->clear_speedy_cache();
+
+					return $saved;
+				}
+			}
+
+			// Credentials are valid (or empty) — save everything normally
+			$saved = parent::process_admin_options();
+			$this->clear_speedy_cache();
+
+			// Trigger background sync if credentials are present
+			if ( $saved && $this->get_option('speedy_username') && $this->get_option('speedy_password') ) {
+				if ( function_exists( 'as_schedule_single_action' ) ) {
+					// Cancel any pending sync to avoid duplicates
+					if ( function_exists( 'as_unschedule_action' ) ) {
+						as_unschedule_action( 'speedy_modern_sync_locations_event' );
+					}
+					// Schedule new sync immediately
+					as_schedule_single_action( time(), 'speedy_modern_sync_locations_event' );
+				}
+			}
 
 			return $saved;
+		}
+
+		/**
+		 * Validate Speedy API credentials by making a lightweight contract call.
+		 *
+		 * @param string $username Speedy username.
+		 * @param string $password Speedy password.
+		 *
+		 * @return true|WP_Error True on success, WP_Error on failure.
+		 */
+		private function validate_speedy_credentials( string $username, string $password ) {
+			$body = wp_json_encode( [
+				'userName' => $username,
+				'password' => $password,
+			] );
+
+			$response = wp_remote_post( 'https://api.speedy.bg/v1/client/contract', [
+				'headers' => [
+					'Content-Type' => 'application/json',
+					'Accept'       => 'application/json',
+				],
+				'body'    => $body,
+				'timeout' => 15,
+			] );
+
+			// Network / cURL error
+			if ( is_wp_error( $response ) ) {
+				return new WP_Error(
+					'speedy_connection_error',
+					$response->get_error_message()
+				);
+			}
+
+			$code = wp_remote_retrieve_response_code( $response );
+			$data = json_decode( wp_remote_retrieve_body( $response ), true );
+
+			// Speedy returns 401 for bad credentials
+			if ( 401 === $code || ( isset( $data['error'] ) ) ) {
+				$api_message = $data['error']['message']
+					?? $data['error']
+					?? __( 'Invalid username or password.', 'speedy-modern' );
+
+				return new WP_Error( 'speedy_auth_failed', $api_message );
+			}
+
+			// Any non-200 response
+			if ( $code < 200 || $code >= 300 ) {
+				return new WP_Error(
+					'speedy_api_error',
+					sprintf(
+						/* translators: %d: HTTP status code */
+						__( 'Unexpected API response (HTTP %d).', 'speedy-modern' ),
+						$code
+					)
+				);
+			}
+
+			// If we got clients back, credentials are valid
+			if ( isset( $data['clients'] ) && is_array( $data['clients'] ) ) {
+				return true;
+			}
+
+			return new WP_Error(
+				'speedy_unexpected_response',
+				__( 'The API returned an unexpected response. Please check your credentials.', 'speedy-modern' )
+			);
+		}
+
+		/**
+		 * Validate the sender_city field.
+		 *
+		 * Since the options are loaded via AJAX, the standard validation (checking against keys) fails.
+		 * We simply return the value (sanitized).
+		 *
+		 * @param string $key
+		 * @param string $value
+		 * @return string
+		 */
+		public function validate_sender_city_field( $key, $value ) {
+			return sanitize_text_field( $value );
 		}
 
 		/**
 		 * Define the settings fields
 		 */
 		public function init_form_fields(): void {
-			$this->form_fields = array(
+
+			$this->instance_form_fields = array(
 				// --- SECTION: CONNECTION ---
 				'section_api' => [
 					'title' => __( 'Speedy API Connection', 'speedy-modern' ),
@@ -77,13 +247,13 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 					'default'     => __( 'Speedy Delivery', 'speedy-modern' ),
 					'desc_tip'    => true,
 				],
-				'speedy_username' => [ // Changed from username to match your API methods
+				'speedy_username' => [
 					'title' => __( 'Username', 'speedy-modern' ),
 					'type'  => 'text'
 				],
 				'speedy_password' => [
 					'title' => __( 'Password', 'speedy-modern' ),
-					'type'  => 'password'
+					'type'  => 'password',
 				],
 			);
 
@@ -91,7 +261,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 			if ( $this->get_option('speedy_username') && $this->get_option('speedy_password') ) {
 				$this->add_authenticated_fields();
 			} else {
-				$this->form_fields['info_msg'] = [
+				$this->instance_form_fields['info_msg'] = [
 					'type'        => 'title',
 					'description' => __( 'Please save your credentials to unlock shipping options.', 'speedy-modern' ),
 				];
@@ -103,6 +273,19 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 		 * These are merged into the main form_fields array.
 		 */
 		private function add_authenticated_fields(): void {
+			
+			$current_city = $this->get_instance_option( 'sender_city' );
+			
+			// Workaround: If a new city is posted, add it to options so validation passes
+			// even if validate_sender_city_field is somehow bypassed or fails.
+			$field_key = $this->get_field_key( 'sender_city' );
+			if ( isset( $_POST[ $field_key ] ) ) {
+				$posted_city = sanitize_text_field( $_POST[ $field_key ] );
+				if ( $posted_city ) {
+					$current_city = $posted_city;
+				}
+			}
+
 			$authenticated = [
 
 				// --- SECTION: SENDER DETAILS ---
@@ -119,9 +302,30 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 					'title' => __( 'Contact Person', 'speedy-modern' ),
 					'type'  => 'text'
 				],
+				'sender_email' => [
+					'title' => __( 'Email', 'speedy-modern' ),
+					'type'  => 'email'
+				],
 				'sender_phone' => [
 					'title' => __( 'Phone Number', 'speedy-modern' ),
 					'type'  => 'text'
+				],
+				'sender_city' => [
+					'title'   => __( 'City', 'speedy-modern' ),
+					'type'    => 'select',
+					'class'   => 'speedy-city-search',
+					'options' => [ $current_city => speedy_modern_get_city_name_by_id( $current_city ) ],
+					'custom_attributes' => [
+						'data-placeholder' => __( 'Search for a city...', 'speedy-modern' ),
+					],
+				],
+				'sender_officeyesno' => [
+					'title'   => __( 'Send from Office', 'speedy-modern' ),
+					'type'    => 'select',
+					'options' => [
+						'NO'  => __( 'No', 'speedy-modern' ),
+						'YES' => __( 'Yes', 'speedy-modern' ),
+					],
 				],
 				'sender_office' => [
 					'title'   => __( 'Shipping from Office', 'speedy-modern' ),
@@ -135,9 +339,9 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 					'description' => __( 'Format HH:MM', 'speedy-modern' ),
 				],
 
-				// --- SECTION: SERVICES & PRICING ---
-				'section_services' => [
-					'title' => __( 'Services & Pricing', 'speedy-modern' ),
+				// --- SECTION: SHIPMENT SETTINGS ---
+				'section_shipment' => [
+					'title' => __( 'Shipment Settings', 'speedy-modern' ),
 					'type'  => 'title',
 				],
 				'uslugi' => [
@@ -146,39 +350,22 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 					'options'  => $this->get_speedy_services(),
 					'default'  => '505',
 				],
-				'cenadostavka' => [
-					'title'   => __( 'Pricing Method', 'speedy-modern' ),
+				'opakovka' => [
+					'title'   => __( 'Packaging', 'speedy-modern' ),
+					'type'    => 'text',
+					'default' => 'BOX'
+				],
+				'teglo' => [
+					'title'   => __( 'Default Weight', 'speedy-modern' ),
+					'type'    => 'number',
+					'default' => '1'
+				],
+				'obqvena' => [
+					'title'   => __( 'Declared Value', 'speedy-modern' ),
 					'type'    => 'select',
 					'options' => [
-						'speedycalculator' => __( 'Speedy Calculator', 'speedy-modern' ),
-						'fixedprices'      => __( 'Fixed Price', 'speedy-modern' ),
-						'freeshipping'     => __( 'Free Shipping', 'speedy-modern' ),
-						'nadbavka'         => __( 'Calculator + Surcharge', 'speedy-modern' ),
-					],
-				],
-				'fixed_shipping_office' => [
-					'title' => __( 'Fixed Price to Office', 'speedy-modern' ),
-					'type'  => 'number',
-					'custom_attributes' => [ 'step' => '0.01' ],
-				],
-				'fixed_shipping_address' => [
-					'title' => __( 'Fixed Price to Address', 'speedy-modern' ),
-					'type'  => 'number',
-					'custom_attributes' => [ 'step' => '0.01' ],
-				],
-
-				// --- SECTION: ADDITIONAL OPTIONS ---
-				'section_extra' => [
-					'title' => __( 'Additional Options', 'speedy-modern' ),
-					'type'  => 'title',
-				],
-				'test_before_pay' => [
-					'title'   => __( 'Options Before Payment', 'speedy-modern' ),
-					'type'    => 'select',
-					'options' => [
-						'NO'   => __( 'None', 'speedy-modern' ),
-						'OPEN' => __( 'Open', 'speedy-modern' ),
-						'TEST' => __( 'Test', 'speedy-modern' ),
+						'NO'  => __( 'No', 'speedy-modern' ),
+						'YES' => __( 'Yes', 'speedy-modern' ),
 					],
 				],
 				'chuplivost' => [
@@ -189,22 +376,190 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 						'YES' => __( 'Yes', 'speedy-modern' ),
 					],
 				],
-
-				// --- SECTION: SPECIAL REQUIREMENTS ---
-				'section_requirements' => [
-					'title'       => __( 'Special Requirements', 'speedy-modern' ),
-					'type'        => 'title',
-					'description' => __( 'Configure options like Open/Test before pay and Fragile stickers.', 'speedy-modern' ),
-				],
-				'special_requirements' => [
-					'title'    => __( 'Enabled Requirements', 'speedy-modern' ),
-					'type'     => 'multiselect',
-					'options'  => $this->get_speedy_special_requirements(),
-				],
 				'saturdayoption' => [
 					'title'   => __( 'Saturday Delivery', 'speedy-modern' ),
 					'type'    => 'select',
 					'default' => 'NO',
+					'options' => [
+						'NO'  => __( 'No', 'speedy-modern' ),
+						'YES' => __( 'Yes', 'speedy-modern' ),
+					],
+				],
+				'special_requirements' => [
+					'title'    => __( 'Special Requirements', 'speedy-modern' ),
+					'type'     => 'select',
+					'options'  => $this->get_speedy_special_requirements(),
+				],
+
+				// --- SECTION: PRICING & PAYMENT ---
+				'section_pricing' => [
+					'title' => __( 'Pricing & Payment', 'speedy-modern' ),
+					'type'  => 'title',
+				],
+				'cenadostavka' => [
+					'title'   => __( 'Pricing Method', 'speedy-modern' ),
+					'type'    => 'select',
+					'options' => [
+						'speedycalculator' => __( 'Speedy Calculator', 'speedy-modern' ),
+						'fixedprices'      => __( 'Fixed Price', 'speedy-modern' ),
+						'freeshipping'     => __( 'Free Shipping', 'speedy-modern' ),
+						'fileprices'       => __( 'Custom Prices', 'speedy-modern' ),
+						'nadbavka'         => __( 'Calculator + Surcharge', 'speedy-modern' ),
+					],
+				],
+				'suma_nadbavka'          => [
+					'title'        => __( 'Surcharge Amount', 'speedy-modern' ),
+					'type'         => 'number',
+					'custom_class' => 'suma-nadbavka',
+					'custom_attributes' => [ 'step' => '0.01' ],
+				],
+				'fileceni'               => [
+					'title'        => __( 'CSV Price File', 'speedy-modern' ),
+					'type'         => 'text', // Changed to text for JS handling
+					'class'        => 'speedy-file-input-wrapper', // Hook for JS
+					'description'  => __( 'Path to CSV file with custom prices', 'speedy-modern' ),
+				],
+				'free_shipping' => [
+					'title'       => __( 'Free Shipping', 'speedy-modern' ),
+					'description' => __( 'Sum ABOVE the specified here activates free shipping to office/address. Explanation: If you want users to receive free shipping when reaching X amount - enter it with 0.01 less in the respective field. For example, for free shipping when reaching 100lv - enter 99.99 etc.', 'speedy-modern' ),
+					'type'        => 'checkbox',
+					'default'     => 'no'
+				],
+				'free_shipping_automat'  => [
+					'title'        => __( 'Free Shipping to Automat > Amount', 'speedy-modern' ),
+					'type'         => 'number',
+					'custom_class' => 'free-shipping-automat',
+					'custom_attributes' => [ 'step' => '0.01' ],
+				],
+				'free_shipping_office'   => [
+					'title'        => __( 'Free Shipping to Office > Amount', 'speedy-modern' ),
+					'type'         => 'number',
+					'custom_class' => 'free-shipping-office',
+					'custom_attributes' => [ 'step' => '0.01' ],
+				],
+				'free_shipping_address'  => [
+					'title'        => __( 'Free Shipping to Address > Amount', 'speedy-modern' ),
+					'type'         => 'number',
+					'custom_class' => 'free-shipping-address',
+					'custom_attributes' => [ 'step' => '0.01' ],
+				],
+				'fixed_shipping' => [
+					'title'       => __( 'Fixed Shipping Price', 'speedy-modern' ),
+					'description' => __( 'Enable fixed shipping price to office/address', 'speedy-modern' ),
+					'type'        => 'checkbox',
+					'default'     => 'no'
+				],
+				'fixed_shipping_automat' => [
+					'title'        => __( 'Fixed Price to Automat', 'speedy-modern' ),
+					'type'         => 'number',
+					'custom_class' => 'fixed-shipping-automat',
+					'custom_attributes' => [ 'step' => '0.01' ],
+				],
+				'fixed_shipping_office' => [
+					'title' => __( 'Fixed Price to Office', 'speedy-modern' ),
+					'type'  => 'number',
+					'custom_class' => 'fixed-shipping-office',
+					'custom_attributes' => [ 'step' => '0.01' ],
+				],
+				'fixed_shipping_address' => [
+					'title' => __( 'Fixed Price to Address', 'speedy-modern' ),
+					'type'  => 'number',
+					'custom_class' => 'fixed-shipping-address',
+					'custom_attributes' => [ 'step' => '0.01' ],
+				],
+				'moneytransfer'          => [
+					'title'   => __( 'Money Transfer Type', 'speedy-modern' ),
+					'type'    => 'select',
+					'options' => [
+						'NO'        => __( 'Cash on Delivery', 'speedy-modern' ),
+						'YES'       => __( 'Postal Money Transfer', 'speedy-modern' ),
+						'fiscal'    => __( 'Fiscal Receipt (Items)', 'speedy-modern' ),
+						'fiscalone' => __( 'Fiscal Receipt (Groups)', 'speedy-modern' )
+					],
+				],
+				'includeshippingprice'   => [
+					'title'   => __( 'Include Shipping Price in COD', 'speedy-modern' ),
+					'type'    => 'select',
+					'options' => [
+						'NO'  => __( 'No', 'speedy-modern' ),
+						'YES' => __( 'Yes', 'speedy-modern' ),
+					],
+				],
+				'nachinplashtane'        => [
+					'title'    => __( 'COD Payout Method', 'speedy-modern' ),
+					'type'     => 'text',
+					'default'  => 'по договор',
+					'custom_attributes' => [ 'disabled' => 'disabled' ],
+				],
+				'administrative'         => [
+					'title'   => __( 'Administrative Fee', 'speedy-modern' ),
+					'type'    => 'select',
+					'options' => [
+						'NO'  => __( 'No', 'speedy-modern' ),
+						'YES' => __( 'Yes', 'speedy-modern' ),
+					],
+				],
+
+				// --- SECTION: WORKFLOW & OPTIONS ---
+				'section_options' => [
+					'title' => __( 'Workflow & Options', 'speedy-modern' ),
+					'type'  => 'title',
+				],
+				'generate_waybill' => [
+					'title'       => __( 'Automatic Waybill', 'speedy-modern' ),
+					'description' => __( 'Automatically create waybill on order completion', 'speedy-modern' ),
+					'type'        => 'checkbox',
+					'default'     => 'no'
+				],
+				'printer'                => [
+					'title'   => __( 'Label Printer', 'speedy-modern' ),
+					'type'    => 'select',
+					'options' => [
+						'NO'  => __( 'No', 'speedy-modern' ),
+						'YES' => __( 'Yes', 'speedy-modern' ),
+					],
+				],
+				'additionalcopy'         => [
+					'title'   => __( 'Additional Waybill Copy', 'speedy-modern' ),
+					'type'    => 'select',
+					'options' => [
+						'NO'  => __( 'No', 'speedy-modern' ),
+						'YES' => __( 'Yes', 'speedy-modern' ),
+					],
+				],
+				'addressonefield'        => [
+					'title'   => __( 'Address in One Field', 'speedy-modern' ),
+					'type'    => 'select',
+					'options' => [
+						'NO'  => __( 'No', 'speedy-modern' ),
+						'YES' => __( 'Yes', 'speedy-modern' ),
+					],
+				],
+				'fast_checkout'          => [
+					'title'   => __( 'Fast Checkout', 'speedy-modern' ),
+					'type'    => 'checkbox',
+					'default' => 'no'
+				],
+				'test_before_pay' => [
+					'title'   => __( 'Options Before Payment', 'speedy-modern' ),
+					'type'    => 'select',
+					'options' => [
+						'NO'   => __( 'None', 'speedy-modern' ),
+						'OPEN' => __( 'Open', 'speedy-modern' ),
+						'TEST' => __( 'Test', 'speedy-modern' ),
+					],
+				],
+				'testplatec'             => [
+					'title'   => __( 'Return Shipment Payer (Test/Open)', 'speedy-modern' ),
+					'type'    => 'select',
+					'options' => [
+						'SENDER'    => __( 'Sender', 'speedy-modern' ),
+						'RECIPIENT' => __( 'Recipient', 'speedy-modern' ),
+					],
+				],
+				'autoclose'              => [
+					'title'   => __( 'Auto Close Options at Automat', 'speedy-modern' ),
+					'type'    => 'select',
 					'options' => [
 						'NO'  => __( 'No', 'speedy-modern' ),
 						'YES' => __( 'Yes', 'speedy-modern' ),
@@ -232,9 +587,13 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 						'RECIPIENT' => __( 'Recipient', 'speedy-modern' ),
 					],
 				],
+				'vaucherpayerdays'       => [
+					'title'        => __( 'Voucher Validity (Days)', 'speedy-modern' ),
+					'type'         => 'number',
+				],
 			];
 
-			$this->form_fields = array_merge( $this->form_fields, $authenticated );
+			$this->instance_form_fields = array_merge( $this->instance_form_fields, $authenticated );
 		}
 
 		/**
@@ -471,29 +830,47 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				return $requirements;
 			}
 
-			$requirements = [];
+			$requirements = [ '0' => __( '-- None --', 'speedy-modern' ) ];
 			$username = $this->get_option( 'speedy_username' );
 			$password = $this->get_option( 'speedy_password' );
+
+			if ( ! $username || ! $password ) {
+				return $requirements;
+			}
 
 			$body = json_encode([
 				'userName' => $username,
 				'password' => $password,
 			]);
 
-			$ch = curl_init( 'https://api.speedy.bg/v1/services/special' ); // Adjusted to your legacy endpoint logic
+			$ch = curl_init( 'https://api.speedy.bg/v1/client/contract/info' );
 			curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
 			curl_setopt( $ch, CURLOPT_POST, true );
 			curl_setopt( $ch, CURLOPT_POSTFIELDS, $body );
-			curl_setopt( $ch, CURLOPT_HTTPHEADER, [ 'Content-Type: application/json' ] );
+			curl_setopt( $ch, CURLOPT_HTTPHEADER, [
+				'Content-Type: application/json',
+				'Accept: application/json'
+			] );
 
 			$response = curl_exec( $ch );
+			$error = curl_error( $ch );
 			curl_close( $ch );
+
+			if ( $error ) {
+				return $requirements;
+			}
 
 			$data = json_decode( $response, true );
 
-			if ( isset( $data['specialServices'] ) ) {
-				foreach ( $data['specialServices'] as $service ) {
-					$requirements[ $service['id'] ] = $service['name'];
+			if ( isset( $data['specialDeliveryRequirements']['requirements'] ) && is_array( $data['specialDeliveryRequirements']['requirements'] ) ) {
+				foreach ( $data['specialDeliveryRequirements']['requirements'] as $req ) {
+					// Use ID if available, otherwise use text as key (not ideal but fallback)
+					$id = $req['id'] ?? $req['text'];
+					$text = $req['text'] ?? $id;
+					
+					if ( $id && $text ) {
+						$requirements[ $id ] = $text;
+					}
 				}
 				set_transient( $cache_key, $requirements, DAY_IN_SECONDS );
 			}
@@ -555,7 +932,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 
 				if ( false !== $cost ) {
 					// Use the service name from our cache as the label (e.g., "505 - City Courier")
-					$label = isset( $available_services[ $service_id ] ) ? $available_services[ $service_id ] : $this->title;
+					$label = $available_services[ $service_id ] ?? $this->title;
 
 					$rate = array(
 						'id'      => $this->id . '_' . $service_id,

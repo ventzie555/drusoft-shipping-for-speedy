@@ -9,10 +9,42 @@ class Speedy_Modern_Syncer {
 	 * Main entry point for the background job.
 	 */
 	public static function sync() {
+		// Increase time limit for sync
+		if ( function_exists( 'set_time_limit' ) ) {
+			set_time_limit( 300 );
+		}
+
 		// Get Settings (to access API credentials)
+		// Try global settings first
 		$settings = get_option( 'woocommerce_speedy_modern_settings' );
+		$username = $settings['speedy_username'] ?? '';
+		$password = $settings['speedy_password'] ?? '';
+
+		// If not found, try to find ANY instance with credentials
+		if ( empty( $username ) || empty( $password ) ) {
+			global $wpdb;
+			$option_like = 'woocommerce_speedy_modern_%_settings';
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s",
+					$option_like
+				)
+			);
+
+			if ( $rows ) {
+				foreach ( $rows as $row ) {
+					$inst_settings = maybe_unserialize( $row->option_value );
+					if ( is_array( $inst_settings ) && ! empty( $inst_settings['speedy_username'] ) && ! empty( $inst_settings['speedy_password'] ) ) {
+						$username = $inst_settings['speedy_username'];
+						$password = $inst_settings['speedy_password'];
+						break;
+					}
+				}
+			}
+		}
 		
-		if ( empty( $settings['speedy_username'] ) || empty( $settings['speedy_password'] ) ) {
+		if ( empty( $username ) || empty( $password ) ) {
 			// Log error: Credentials missing
 			if ( class_exists( 'WC_Logger' ) ) {
 				wc_get_logger()->error( 'Speedy Sync Failed: Missing credentials.', array( 'source' => 'speedy-modern' ) );
@@ -20,11 +52,13 @@ class Speedy_Modern_Syncer {
 			return;
 		}
 
+		$creds = [ 'speedy_username' => $username, 'speedy_password' => $password ];
+
 		// Sync Cities
-		self::update_cities( $settings );
+		self::update_cities( $creds );
 
 		// Sync Offices
-		self::update_offices( $settings );
+		self::update_offices( $creds );
 	}
 
 	private static function update_cities( $settings ) {
@@ -36,16 +70,15 @@ class Speedy_Modern_Syncer {
 		$body = json_encode( [
 			'userName' => $username,
 			'password' => $password,
-			'countryId' => 100 // Bulgaria
 		] );
 
-		$ch = curl_init( 'https://api.speedy.bg/v1/location/site' );
+		// Use CSV endpoint for full list
+		$ch = curl_init( 'https://api.speedy.bg/v1/location/site/csv/100' );
 		curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
 		curl_setopt( $ch, CURLOPT_POST, true );
 		curl_setopt( $ch, CURLOPT_POSTFIELDS, $body );
 		curl_setopt( $ch, CURLOPT_HTTPHEADER, [
-			'Content-Type: application/json',
-			'Accept: application/json'
+			'Content-Type: application/json'
 		] );
 
 		$response = curl_exec( $ch );
@@ -59,36 +92,54 @@ class Speedy_Modern_Syncer {
 			return;
 		}
 
-		$data = json_decode( $response, true );
+		// Parse CSV
+		$lines = explode( "\n", $response );
+		if ( empty( $lines ) ) {
+			return;
+		}
 
-		if ( isset( $data['sites'] ) && is_array( $data['sites'] ) ) {
-			$table_name = $wpdb->prefix . 'speedy_cities';
-			
-			// Truncate table
-			$wpdb->query( "TRUNCATE TABLE $table_name" );
+		// Get headers
+		$header = str_getcsv( array_shift( $lines ) );
 
-			$arr_excluded_cities = [21539, 21542]; // Exclude problematic cities
+		$table_name = $wpdb->prefix . 'speedy_cities';
 
-			foreach ( $data['sites'] as $city ) {
-				if ( in_array( $city['id'], $arr_excluded_cities ) ) {
-					continue;
-				}
+		// Truncate table
+		$wpdb->query( "TRUNCATE TABLE $table_name" );
 
-				$wpdb->insert(
-					$table_name,
-					array(
-						'id'        => $city['id'],
-						'name'      => self::mb_ucfirst( $city['name'] ?? '' ),
-						'post_code' => $city['postCode'] ?? '',
-						'region'    => self::mb_ucfirst( $city['region'] ?? '' ),
-						'type'      => $city['type'] ?? ''
-					)
-				);
+		//$arr_excluded_cities = [21539, 21542]; // Exclude problematic cities
+		$count = 0;
+
+		foreach ( $lines as $line ) {
+			if ( empty( trim( $line ) ) ) {
+				continue;
 			}
-			
-			if ( class_exists( 'WC_Logger' ) ) {
-				wc_get_logger()->info( 'Speedy Cities Sync Completed. Count: ' . count($data['sites']), array( 'source' => 'speedy-modern' ) );
+
+			$row = str_getcsv( $line );
+			if ( count( $row ) !== count( $header ) ) {
+				continue;
 			}
+
+			$city = array_combine( $header, $row );
+
+			/*if ( in_array( $city['id'], $arr_excluded_cities ) ) {
+				continue;
+			}*/
+
+			$wpdb->insert(
+				$table_name,
+				array(
+					'id'        => $city['id'],
+					'name'      => self::mb_ucfirst( $city['name'] ?? '' ),
+					'post_code' => $city['postCode'] ?? '',
+					'region'    => self::mb_ucfirst( $city['region'] ?? '' ),
+					'type'      => $city['type'] ?? ''
+				)
+			);
+			$count++;
+		}
+
+		if ( class_exists( 'WC_Logger' ) ) {
+			wc_get_logger()->info( 'Speedy Cities Sync Completed. Count: ' . $count, array( 'source' => 'speedy-modern' ) );
 		}
 	}
 
