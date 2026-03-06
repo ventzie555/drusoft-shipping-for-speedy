@@ -46,6 +46,14 @@
         let lastDeliveryType = 'address';
         let lastOfficeId = '';
 
+        // Guard flag: true while restoring Speedy UI after a WooCommerce
+        // checkout AJAX refresh. Prevents update_checkout → updated_checkout loops.
+        let restoringState = false;
+
+        // Modal references (assigned when modal HTML is injected)
+        let $speedyMapModal = null;
+        let $speedyMapFrame = null;
+
         // Current address context ('billing' or 'shipping')
         let currentContext = 'billing';
 
@@ -95,10 +103,14 @@
 
         // Listen for WooCommerce checkout updates (Page load / AJAX refresh)
         $(document.body).on('updated_checkout', function() {
-            // Re-capture originals from fresh DOM
-            captureOriginals('billing');
-            captureOriginals('shipping');
-            
+            // Only re-capture originals when Speedy is NOT active,
+            // otherwise we'd capture the Speedy-modified fields (select2 city etc.)
+            // as "originals" and could never restore the real text inputs.
+            if (!isSpeedyActive) {
+                captureOriginals('billing');
+                captureOriginals('shipping');
+            }
+
             // Determine context based on checkbox state
             updateContext();
 
@@ -107,7 +119,18 @@
             if (!$('#' + currentContext + '_city').hasClass('select2-hidden-accessible')) {
                 isSpeedyActive = false; 
             }
+
+            // Guard: while restoring UI after AJAX refresh, don't trigger another update_checkout.
+            // This flag is set before checkShippingMethod and cleared AFTER the async
+            // city-loading AJAX completes (inside handleCityChange success callback).
+            restoringState = true;
             checkShippingMethod();
+            // Note: restoringState is cleared inside handleCityChange's AJAX success,
+            // or immediately below if Speedy was already active / no AJAX needed.
+            if (isSpeedyActive && $('#' + currentContext + '_city').hasClass('select2-hidden-accessible')) {
+                // City select already exists – no async work was triggered
+                restoringState = false;
+            }
         });
 
         // Listen for Country Change (WC re-sorts fields on this event)
@@ -328,6 +351,7 @@
 
             if (!currentState) {
                 $('#' + currentContext + '_city_field').hide();
+                restoringState = false;
             } else {
                 handleStateChange(currentState, currentCity);
             }
@@ -469,7 +493,10 @@
         }
 
         function handleStateChange(stateCode, preSelectedCity) {
-            if (!isSpeedyActive || !stateCode) return;
+            if (!isSpeedyActive || !stateCode) {
+                restoringState = false;
+                return;
+            }
 
             return $.ajax({
                 url: params.ajax_url,
@@ -521,6 +548,9 @@
             
             if ($newCitySelect.val()) {
                  handleCityChange($newCitySelect.val());
+            } else {
+                 // No preselected city – clear the restoration flag
+                 restoringState = false;
             }
         }
 
@@ -544,6 +574,12 @@
                     if (response.success) {
                         presentDeliveryOptions(response.data);
                     }
+                    // City changed → recalculate shipping (skip during UI restoration)
+                    if (!restoringState) {
+                        $(document.body).trigger('update_checkout');
+                    }
+                    // Always clear the flag here – this is the end of the async restoration chain
+                    restoringState = false;
                 }
             });
         }
@@ -588,9 +624,14 @@
 
             $('input[name="speedy_delivery_type"]').on('change', function() {
                 handleDeliveryTypeChange($(this).val());
+                // Delivery type changed → recalculate shipping
+                $(document.body).trigger('update_checkout');
             });
             
             // Trigger initial state
+            if (lastDeliveryType !== 'address') {
+                $('input[name="speedy_delivery_type"][value="' + lastDeliveryType + '"]').prop('checked', true);
+            }
             handleDeliveryTypeChange(lastDeliveryType);
         }
 
@@ -632,8 +673,8 @@
 
         function showPointsDropdown(points, type) {
             const label = (type === 'office') ? params.i18n.select_office : params.i18n.select_automat;
-            let options = '<option value="">' + label + '...</option>';
-            
+            let options = '<option value=""></option>';
+
             $.each(points, function(index, point) {
                 options += '<option value="' + point.id + '">' + point.label + '</option>';
             });
@@ -649,6 +690,8 @@
             const $officeSelect = $('#speedy_office_id');
             $officeSelect.select2({
                 width: '100%',
+                placeholder: label + '...',
+                allowClear: true,
                 matcher: modelMatcher
             });
 
@@ -683,6 +726,9 @@
                 
                 lastOfficeId = $(this).val();
                 sessionStorage.setItem('speedy_office_id', lastOfficeId);
+
+                // Office/automat selected → recalculate shipping
+                $(document.body).trigger('update_checkout');
             });
         }
 

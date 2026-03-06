@@ -131,7 +131,7 @@ function speedy_modern_enqueue_scripts(): void {
 			'speedy-modern-checkout',
 			SPEEDY_MODERN_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'select2' ),
-			'1.0.0',
+			'1.0.3',
 			true
 		);
 
@@ -183,26 +183,8 @@ function speedy_modern_enqueue_admin_scripts( $hook ): void {
 
 	// Determine if credentials are already saved (for any instance)
 	// We check the global option key that WooCommerce uses for instance settings
-	global $wpdb;
-	$has_credentials = false;
-	$option_like     = 'woocommerce_speedy_modern_%_settings';
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-	$rows = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT option_value FROM $wpdb->options WHERE option_name LIKE %s LIMIT 10",
-			$option_like
-		)
-	);
-
-	if ( $rows ) {
-		foreach ( $rows as $row ) {
-			$settings = maybe_unserialize( $row->option_value );
-			if ( is_array( $settings ) && ! empty( $settings['speedy_username'] ) && ! empty( $settings['speedy_password'] ) ) {
-				$has_credentials = true;
-				break;
-			}
-		}
-	}
+	$credentials = speedy_modern_get_first_credentials();
+	$has_credentials = ! empty( $credentials );
 
 	wp_enqueue_script(
 		'speedy-modern-admin-shipping',
@@ -308,26 +290,9 @@ function speedy_modern_search_cities(): void {
 	// We need credentials to query the API.
 	// Since this is a global AJAX handler, we need to find *some* valid credentials.
 	// We'll try to get them from the first configured instance.
-	global $wpdb;
-	$username = '';
-	$password = '';
-	
-	$option_like = 'woocommerce_speedy_modern_%_settings';
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-	$rows = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT 1",
-			$option_like
-		)
-	);
-
-	if ( $rows ) {
-		$settings = maybe_unserialize( $rows[0]->option_value );
-		if ( is_array( $settings ) ) {
-			$username = $settings['speedy_username'] ?? '';
-			$password = $settings['speedy_password'] ?? '';
-		}
-	}
+	$credentials = speedy_modern_get_first_credentials();
+	$username = $credentials['username'] ?? '';
+	$password = $credentials['password'] ?? '';
 
 	if ( empty( $username ) || empty( $password ) ) {
 		wp_send_json_error( 'No API credentials found.' );
@@ -378,7 +343,7 @@ function speedy_modern_search_cities(): void {
  * Used by Select2 in admin settings.
  */
 add_action( 'wp_ajax_speedy_modern_search_offices', 'speedy_modern_search_offices' );
-function speedy_modern_search_offices() {
+function speedy_modern_search_offices(): void {
 	// Check permissions
 	if ( ! current_user_can( 'manage_woocommerce' ) ) {
 		wp_send_json_error( 'Permission denied' );
@@ -416,7 +381,7 @@ function speedy_modern_search_offices() {
  * AJAX Handler for file uploads in admin settings.
  */
 add_action( 'wp_ajax_speedy_modern_upload_file', 'speedy_modern_upload_file' );
-function speedy_modern_upload_file() {
+function speedy_modern_upload_file(): void {
 	// Check permissions
 	if ( ! current_user_can( 'manage_woocommerce' ) ) {
 		wp_send_json_error( 'Permission denied' );
@@ -467,9 +432,42 @@ function speedy_modern_upload_file() {
 }
 
 /**
+ * Helper: Retrieve the first available Speedy API credentials from settings.
+ *
+ * @return array|null Array with 'username' and 'password' keys, or null if not found.
+ */
+function speedy_modern_get_first_credentials(): ?array {
+	global $wpdb;
+	$option_like = 'woocommerce_speedy_modern_%_settings';
+	
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$rows = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT option_value FROM $wpdb->options WHERE option_name LIKE %s LIMIT 10",
+			$option_like
+		)
+	);
+
+	if ( $rows ) {
+		foreach ( $rows as $row ) {
+			$settings = maybe_unserialize( $row->option_value );
+			if ( is_array( $settings ) && ! empty( $settings['speedy_username'] ) && ! empty( $settings['speedy_password'] ) ) {
+				return [
+					'username' => $settings['speedy_username'],
+					'password' => $settings['speedy_password'],
+				];
+			}
+		}
+	}
+	
+	return null;
+}
+
+/**
  * Helper: Transliterate Latin to Cyrillic (Bulgarian standard)
  */
-function speedy_modern_transliterate_latin_to_cyrillic( $text ) {
+/*
+ function speedy_modern_transliterate_latin_to_cyrillic( $text ): string {
 	$map = [
 		'A' => 'А', 'B' => 'Б', 'V' => 'В', 'G' => 'Г', 'D' => 'Д', 'E' => 'Е', 'Z' => 'З', 'I' => 'И', 'J' => 'Й', 'K' => 'К', 'L' => 'Л', 'M' => 'М', 'N' => 'Н', 'O' => 'О', 'P' => 'П', 'R' => 'Р', 'S' => 'С', 'T' => 'Т', 'U' => 'У', 'F' => 'Ф', 'H' => 'Х', 'C' => 'Ц',
 		'a' => 'а', 'b' => 'б', 'v' => 'в', 'g' => 'г', 'd' => 'д', 'e' => 'е', 'z' => 'з', 'i' => 'и', 'j' => 'й', 'k' => 'к', 'l' => 'л', 'm' => 'м', 'n' => 'н', 'o' => 'о', 'p' => 'п', 'r' => 'р', 's' => 'с', 't' => 'т', 'u' => 'у', 'f' => 'ф', 'h' => 'х', 'c' => 'ц',
@@ -480,11 +478,12 @@ function speedy_modern_transliterate_latin_to_cyrillic( $text ) {
 
 	return strtr( $text, $map );
 }
+*/
 
 /**
  * Helper: Get Region Map (WC Code => Speedy Name)
  */
-function speedy_modern_get_region_map() {
+function speedy_modern_get_region_map(): array {
 	return [
 		'BG-01' => 'Благоевград',
 		'BG-02' => 'Бургас',
@@ -524,7 +523,7 @@ function speedy_modern_get_region_map() {
 add_action( 'wp_ajax_speedy_get_cities', 'speedy_modern_get_cities_ajax' );
 add_action( 'wp_ajax_nopriv_speedy_get_cities', 'speedy_modern_get_cities_ajax' );
 
-function speedy_modern_get_cities_ajax() {
+function speedy_modern_get_cities_ajax(): void {
 	$region_code = isset( $_POST['region'] ) ? sanitize_text_field( $_POST['region'] ) : '';
 	
 	if ( empty( $region_code ) ) {
@@ -533,7 +532,6 @@ function speedy_modern_get_cities_ajax() {
 
 	global $wpdb;
 	$table_name = $wpdb->prefix . 'speedy_cities';
-	$query = '';
 	$args = [];
 
 	// Use helper function for mapping
@@ -577,7 +575,7 @@ function speedy_modern_get_cities_ajax() {
 add_action( 'wp_ajax_speedy_check_availability', 'speedy_modern_check_availability_ajax' );
 add_action( 'wp_ajax_nopriv_speedy_check_availability', 'speedy_modern_check_availability_ajax' );
 
-function speedy_modern_check_availability_ajax() {
+function speedy_modern_check_availability_ajax(): void {
 	$city_id = isset( $_POST['city_id'] ) ? absint( $_POST['city_id'] ) : 0;
 
 	if ( ! $city_id ) {
@@ -632,7 +630,7 @@ function speedy_modern_check_availability_ajax() {
 add_action( 'wp_ajax_speedy_get_region_by_city', 'speedy_modern_get_region_by_city_ajax' );
 add_action( 'wp_ajax_nopriv_speedy_get_region_by_city', 'speedy_modern_get_region_by_city_ajax' );
 
-function speedy_modern_get_region_by_city_ajax() {
+function speedy_modern_get_region_by_city_ajax(): void {
 	$city_id = isset( $_POST['city_id'] ) ? absint( $_POST['city_id'] ) : 0;
 
 	if ( ! $city_id ) {
@@ -682,12 +680,12 @@ function speedy_modern_get_region_by_city_ajax() {
  * Ensures an office is selected if the user chose "To Office" or "To Automat".
  */
 add_action( 'woocommerce_checkout_process', 'speedy_modern_validate_checkout' );
-function speedy_modern_validate_checkout() {
+function speedy_modern_validate_checkout(): void {
 	// Check if Speedy Modern is the selected shipping method
 	$chosen_methods = WC()->session->get( 'chosen_shipping_methods' );
 	$chosen_shipping = $chosen_methods[0] ?? '';
 
-	if ( strpos( $chosen_shipping, 'speedy_modern' ) === false ) {
+	if ( ! str_contains( $chosen_shipping, 'speedy_modern' ) ) {
 		return;
 	}
 
@@ -712,7 +710,7 @@ function speedy_modern_validate_checkout() {
  * Saves the selected office ID and delivery type to the order.
  */
 add_action( 'woocommerce_checkout_update_order_meta', 'speedy_modern_save_order_meta' );
-function speedy_modern_save_order_meta( $order_id ) {
+function speedy_modern_save_order_meta( $order_id ): void {
 	if ( ! empty( $_POST['speedy_delivery_type'] ) ) {
 		update_post_meta( $order_id, '_speedy_delivery_type', sanitize_text_field( $_POST['speedy_delivery_type'] ) );
 	}

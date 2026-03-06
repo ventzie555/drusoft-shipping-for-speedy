@@ -967,125 +967,853 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 		}
 
 		/**
-		 * Calculate the shipping rate
+		 * Calculate the shipping rate.
+		 *
+		 * Replicates the pricing logic from the legacy woocommerce-speedy-shipping
+		 * plugin: ALWAYS calls the Speedy /v1/calculate API (for session storage
+		 * and shipment validation), then overrides the displayed cost according
+		 * to the configured pricing method (free, fixed, file, calculator, surcharge).
 		 */
 		public function calculate_shipping( $package = array() ): void {
-			/*
-			// Only calculate the rate if enabled in settings
-			if ( 'yes' !== $this->get_option( 'enabled' ) ) {
+			$username = $this->get_option( 'speedy_username' );
+			$password = $this->get_option( 'speedy_password' );
+
+			if ( ! $username || ! $password ) {
+				// No credentials – still show the method with zero cost
+				$this->add_rate( [
+					'id'        => $this->get_rate_id(),
+					'label'     => $this->title,
+					'cost'      => 0,
+					'meta_data' => [ 'missing_address' => true ],
+				] );
 				return;
 			}
 
-			// Only calculate if the destination is Bulgaria
-			if ( 'BG' !== $package['destination']['country'] ) {
+			// --- 1. Parse checkout data ---
+			$checkout       = $this->parse_checkout_post_data();
+			$delivery_type  = $checkout['delivery_type']; // 'address', 'office', 'automat'
+			$office_id      = $checkout['office_id'];
+			$city_id        = $checkout['city_id'];
+			$payment_method = $checkout['payment_method'];
+
+			// For office/automat delivery, we need an office selected
+			if ( in_array( $delivery_type, [ 'office', 'automat' ], true ) && empty( $office_id ) ) {
+				$this->add_rate( [
+					'id'        => $this->get_rate_id(),
+					'label'     => $this->title,
+					'cost'      => 0,
+					'meta_data' => [ 'missing_address' => true ],
+				] );
 				return;
 			}
 
-			// Calculate total weight of the package
-			$weight = 0;
-			foreach ( $package['contents'] as $item ) {
-				$product = $item['data'];
-				$weight  += (float) $product->get_weight() * $item['quantity'];
-			}
-			// Fallback to 1kg if weight is missing or 0
-			$weight = $weight > 0 ? $weight : 1.0;
-
-			// Get selected services from settings
-			$services = $this->get_option( 'uslugi' );
-			if ( empty( $services ) ) {
+			// For address delivery, we need a city
+			if ( 'address' === $delivery_type && empty( $city_id ) ) {
+				$this->add_rate( [
+					'id'        => $this->get_rate_id(),
+					'label'     => $this->title,
+					'cost'      => 0,
+					'meta_data' => [ 'missing_address' => true ],
+				] );
 				return;
 			}
 
-			// Ensure services is an array (Multiselect returns array, but safety first)
-			if ( ! is_array( $services ) ) {
-				$services = array( $services );
+			// --- 2. Determine weight ---
+			$order_weight = $this->resolve_weight( $package );
+
+			// --- 3. Determine order total & subtotal ---
+			$order_total = 0.0;
+			$subtotal    = 0.0;
+			if ( WC()->cart ) {
+				$subtotal    = (float) WC()->cart->get_subtotal();
+				$order_total = (float) WC()->cart->get_totals()['total'] - (float) WC()->cart->get_totals()['shipping_total'];
 			}
 
-			$available_services = $this->get_speedy_services();
+			$is_cod          = ( empty( $payment_method ) || 'cod' === $payment_method );
+			$cenadostavka    = $this->get_option( 'cenadostavka', 'speedycalculator' );
 
-			// Loop through each selected service and get a quote
-			foreach ( $services as $service_id ) {
-				$cost = $this->fetch_speedy_api_rate( $service_id, $weight, $package['destination'] );
+			// --- 4. Determine pricing overrides BEFORE building the API payload ---
+			$is_free_shipping = false;
+			$override_cost    = null; // null = use API price; float = use this value
 
-				if ( false !== $cost ) {
-					// Use the service name from our cache as the label (e.g., "505 - City Courier")
-					$label = $available_services[ $service_id ] ?? $this->title;
-
-					$rate = array(
-						'id'      => $this->id . '_' . $service_id,
-						'label'   => $label,
-						'cost'    => $cost,
-						'package' => $package,
-					);
-
-					$this->add_rate( $rate );
+			// 4a. Free shipping threshold (checkbox + per-type amount)
+			if ( 'yes' === $this->get_option( 'free_shipping' ) ) {
+				$threshold = $this->get_free_shipping_threshold( $delivery_type );
+				if ( $threshold > 0 && $order_total > $threshold ) {
+					$is_free_shipping = true;
+					$override_cost    = 0.0;
 				}
 			}
-			*/
 
-			$this->add_rate( array(
-				'id'    => $this->id,
-				'label' => $this->title,
-				'cost'  => 5,
-			) );
-		}
-
-		/**
-		 * Fetch the shipping rate from Speedy API v1
-		 */
-		private function fetch_speedy_api_rate( $service_id, $weight, $destination ) {
-			$username  = $this->get_option( 'speedy_username' );
-			$password  = $this->get_option( 'speedy_password' );
-			$sender_id = $this->get_option( 'sender_id' );
-
-			if ( ! $username || ! $password || ! $sender_id ) {
-				return false;
+			// 4b. Always-free pricing mode
+			if ( 'freeshipping' === $cenadostavka ) {
+				$is_free_shipping = true;
+				$override_cost    = 0.0;
 			}
 
-			$payload = array(
-				'userName'  => $username,
-				'password'  => $password,
-				'serviceId' => (int) $service_id,
-				'sender'    => array(
-					'clientId' => (int) $sender_id,
-				),
-				'recipient' => array(
-					'countryId' => 100, // Bulgaria
-					'postCode'  => $destination['postcode'],
-					'siteName'  => $destination['city'],
-					'address'   => $destination['address_1'] . ' ' . $destination['address_2'],
-				),
-				'content'   => array(
-					'parcelsCount' => 1,
-					'totalWeight'  => $weight,
-				),
+			// 4c. Fixed shipping price
+			$fixed_price = 0.0;
+			$is_fixed    = false;
+			if ( ! $is_free_shipping && ( 'fixedprices' === $cenadostavka || 'yes' === $this->get_option( 'fixed_shipping' ) ) ) {
+				$fixed_price = $this->get_fixed_price( $delivery_type );
+				if ( $fixed_price > 0 ) {
+					$is_fixed      = true;
+					$override_cost = $fixed_price;
+				}
+			}
+
+			// 4d. CSV file prices
+			$file_cost = false;
+			$is_file   = false;
+			if ( ! $is_free_shipping && ! $is_fixed && 'fileprices' === $cenadostavka ) {
+				$file_cost = $this->get_csv_file_price( $delivery_type, $order_weight, $subtotal );
+				if ( false !== $file_cost ) {
+					$is_file       = true;
+					$override_cost = $file_cost;
+				}
+			}
+
+			// --- 5. Build the full API payload ---
+			$payload = $this->build_api_calculate_payload(
+				$delivery_type,
+				$office_id,
+				$city_id,
+				$order_weight,
+				$order_total,
+				$subtotal,
+				$is_cod,
+				$payment_method,
+				$is_free_shipping,
+				$is_fixed ? $fixed_price : null,
+				$is_file ? $file_cost : null
 			);
 
-			$ch = curl_init( 'https://api.speedy.bg/v1/calculate' );
-			curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
-			curl_setopt( $ch, CURLOPT_POST, true );
-			curl_setopt( $ch, CURLOPT_POSTFIELDS, json_encode( $payload ) );
-			curl_setopt( $ch, CURLOPT_HTTPHEADER, array(
-				'Content-Type: application/json',
-				'Accept: application/json'
-			) );
+			if ( empty( $payload ) ) {
+				error_log( 'Speedy Modern: build_api_calculate_payload returned empty.' );
+				$this->add_rate( [
+					'id'        => $this->get_rate_id(),
+					'label'     => $this->title,
+					'cost'      => 0,
+					'meta_data' => [ 'missing_address' => true ],
+				] );
+				return;
+			}
 
-			$response = curl_exec( $ch );
-			$error    = curl_error( $ch );
-			curl_close( $ch );
+			// Add credentials
+			$payload['userName'] = $username;
+			$payload['password'] = $password;
 
-			if ( $error ) {
+			// Store delivery data in session for future waybill creation.
+			// Re-inject full sender details which were excluded from the calculate
+			// payload to avoid API rejections.
+			$delivery_data_for_session = $payload;
+			unset( $delivery_data_for_session['userName'], $delivery_data_for_session['password'] );
+
+			$full_sender = [];
+			$sender_id = (int) $this->get_option( 'sender_id' );
+			if ( $sender_id > 0 ) {
+				$full_sender['clientId'] = $sender_id;
+			}
+			$sender_phone = $this->get_option( 'sender_phone' );
+			if ( ! empty( $sender_phone ) ) {
+				$full_sender['phone1'] = [ 'number' => $sender_phone ];
+			}
+			$sender_name = $this->get_option( 'sender_name' );
+			if ( ! empty( $sender_name ) ) {
+				$full_sender['contactName'] = $sender_name;
+			}
+			$sender_email = $this->get_option( 'sender_email' );
+			if ( ! empty( $sender_email ) ) {
+				$full_sender['email'] = $sender_email;
+			}
+			if ( 'YES' === $this->get_option( 'sender_officeyesno' ) ) {
+				$drop_off = (int) $this->get_option( 'sender_office' );
+				if ( $drop_off > 0 ) {
+					$full_sender['dropoffOfficeId'] = $drop_off;
+				}
+			}
+			$delivery_data_for_session['sender'] = $full_sender;
+
+			if ( WC()->session ) {
+				WC()->session->set( 'speedy_modern_shipping_data', $delivery_data_for_session );
+			}
+
+			// --- 6. Call the Speedy Calculator API ---
+			$response = $this->call_speedy_calculate_api( $payload );
+
+			if ( is_wp_error( $response ) ) {
+				error_log( 'Speedy Modern: Calculate API error – ' . $response->get_error_message() );
+				// API failed – use override cost if available, or show last known cost, or fallback to 0
+				$fallback = $override_cost ?? ( WC()->session ? WC()->session->get( 'speedy_modern_shipping_cost', 0 ) : 0 );
+				$this->add_rate( [
+					'id'    => $this->get_rate_id(),
+					'label' => $this->title,
+					'cost'  => number_format( (float) $fallback, 2, '.', '' ),
+				] );
+				return;
+			}
+
+			// Check for top-level API error (returned when calculations array is empty)
+			if ( ! empty( $response['error'] ) ) {
+				$error_msg = $response['error']['message'] ?? 'Unknown API error';
+				error_log( 'Speedy Modern: API top-level error – ' . $error_msg );
+				$fallback = $override_cost ?? ( WC()->session ? WC()->session->get( 'speedy_modern_shipping_cost', 0 ) : 0 );
+				$this->add_rate( [
+					'id'    => $this->get_rate_id(),
+					'label' => $this->title,
+					'cost'  => number_format( (float) $fallback, 2, '.', '' ),
+				] );
+				return;
+			}
+
+			// Extract cost from API response — find the first successful calculation.
+			// When multiple serviceIds are sent, some may succeed while others fail.
+			$api_total = null;
+			if ( ! empty( $response['calculations'] ) ) {
+				foreach ( $response['calculations'] as $calc ) {
+					if ( isset( $calc['price']['total'] ) ) {
+						$api_total = (float) $calc['price']['total'];
+						break;
+					}
+				}
+			}
+
+			if ( null === $api_total ) {
+				// Log the first calculation error for debugging
+				$error_msg = $response['calculations'][0]['error']['message']
+					?? $response['error']['message']
+					?? 'No successful calculation returned';
+				error_log( 'Speedy Modern: All calculations failed – ' . $error_msg );
+				$fallback = $override_cost ?? ( WC()->session ? WC()->session->get( 'speedy_modern_shipping_cost', 0 ) : 0 );
+				$this->add_rate( [
+					'id'    => $this->get_rate_id(),
+					'label' => $this->title,
+					'cost'  => number_format( (float) $fallback, 2, '.', '' ),
+				] );
+				return;
+			}
+
+			// --- 7. Determine the final displayed cost ---
+			if ( null !== $override_cost ) {
+				$final_cost = $override_cost;
+			} else {
+				$final_cost = $api_total;
+
+				if ( 'nadbavka' === $cenadostavka ) {
+					$final_cost += (float) $this->get_option( 'suma_nadbavka', 0 );
+				}
+			}
+
+			// Store cost in session
+			if ( WC()->session ) {
+				WC()->session->set( 'speedy_modern_shipping_cost', $final_cost );
+			}
+
+			$this->add_rate( [
+				'id'    => $this->get_rate_id(),
+				'label' => $this->title,
+				'cost'  => number_format( $final_cost, 2, '.', '' ),
+			] );
+		}
+
+		/* ───────────────────────────────────────────────────
+		 *  HELPER: Parse checkout POST data
+		 * ─────────────────────────────────────────────────── */
+
+		/**
+		 * Extract Speedy-specific fields from the checkout AJAX request.
+		 *
+		 * WooCommerce sends checkout form data as a URL-encoded string in
+		 * $_POST['post_data'] during AJAX shipping updates. During final
+		 * order placement, fields are at the top level of $_POST.
+		 *
+		 * @return array {
+		 *     @type string $delivery_type  'address', 'office', or 'automat'
+		 *     @type int    $office_id      Speedy office/automat ID (0 if none)
+		 *     @type int    $city_id        Speedy city (site) ID (0 if none)
+		 *     @type string $payment_method WC payment method slug
+		 * }
+		 */
+		private function parse_checkout_post_data(): array {
+			$data = [];
+
+			// During AJAX updates, form data comes as URL-encoded string
+			// phpcs:ignore WordPress.Security.NonceVerification
+			if ( ! empty( $_POST['post_data'] ) ) {
+				parse_str( wp_unslash( $_POST['post_data'] ), $data );
+			}
+
+			// During final checkout, or if post_data is missing, check top-level $_POST
+			// phpcs:ignore WordPress.Security.NonceVerification
+			$merged = array_merge( $data, $_POST );
+
+			// Determine which address context to use (billing or shipping)
+			$ship_to_different = ! empty( $merged['ship_to_different_address'] ) ? true : false;
+			$context = $ship_to_different ? 'shipping' : 'billing';
+
+			// City ID: the checkout.js replaces the city input with a <select> whose
+			// name is "{context}_city" and value is the Speedy siteId.
+			$city_id = 0;
+			if ( ! empty( $merged[ $context . '_city' ] ) && is_numeric( $merged[ $context . '_city' ] ) ) {
+				$city_id = absint( $merged[ $context . '_city' ] );
+			} elseif ( ! empty( $merged['billing_city'] ) && is_numeric( $merged['billing_city'] ) ) {
+				$city_id = absint( $merged['billing_city'] );
+			}
+
+			$result = [
+				'delivery_type'  => sanitize_text_field( $merged['speedy_delivery_type'] ?? 'address' ),
+				'office_id'      => absint( $merged['speedy_office_id'] ?? 0 ),
+				'city_id'        => $city_id,
+				'payment_method' => sanitize_text_field( $merged['payment_method'] ?? '' ),
+			];
+
+			error_log( 'Speedy Modern: parsed checkout data – ' . wp_json_encode( $result ) );
+
+			return $result;
+		}
+
+		/* ───────────────────────────────────────────────────
+		 *  HELPER: Resolve package weight
+		 * ─────────────────────────────────────────────────── */
+
+		/**
+		 * Determine the shipment weight.
+		 *
+		 * If the admin set a fixed "teglo" (weight) setting, use it.
+		 * Otherwise compute from the cart contents, falling back to 1 kg.
+		 *
+		 * @param array $package WooCommerce shipping package.
+		 * @return float Weight in kg.
+		 */
+		private function resolve_weight( array $package ): float {
+			$fixed_weight = $this->get_option( 'teglo' );
+
+			// If teglo is non-empty AND not zero, use it as a fixed override
+			if ( '' !== $fixed_weight && '0' !== $fixed_weight && (float) $fixed_weight > 0 ) {
+				return (float) $fixed_weight;
+			}
+
+			// Calculate from cart/package contents
+			$weight = 0.0;
+			if ( ! empty( $package['contents'] ) ) {
+				foreach ( $package['contents'] as $item ) {
+					$product = $item['data'];
+					$weight += (float) $product->get_weight() * $item['quantity'];
+				}
+			}
+
+			// Fallback: use WC cart weight (covers edge cases)
+			if ( $weight <= 0 && WC()->cart ) {
+				$weight = (float) WC()->cart->get_cart_contents_weight();
+			}
+
+			// Final fallback: 1 kg
+			return $weight > 0 ? $weight : 1.0;
+		}
+
+		/* ───────────────────────────────────────────────────
+		 *  HELPER: Free shipping threshold for delivery type
+		 * ─────────────────────────────────────────────────── */
+
+		/**
+		 * Get the free shipping threshold for a specific delivery type.
+		 *
+		 * @param string $delivery_type 'address', 'office', or 'automat'
+		 * @return float Threshold amount (0 = disabled).
+		 */
+		private function get_free_shipping_threshold( string $delivery_type ): float {
+			$map = [
+				'office'  => 'free_shipping_office',
+				'automat' => 'free_shipping_automat',
+				'address' => 'free_shipping_address',
+			];
+
+			$key = $map[ $delivery_type ] ?? '';
+			return $key ? (float) $this->get_option( $key, 0 ) : 0.0;
+		}
+
+		/* ───────────────────────────────────────────────────
+		 *  HELPER: Fixed price for delivery type
+		 * ─────────────────────────────────────────────────── */
+
+		/**
+		 * Get the fixed shipping price for a specific delivery type.
+		 *
+		 * @param string $delivery_type 'address', 'office', or 'automat'
+		 * @return float Fixed price (0 = not set).
+		 */
+		private function get_fixed_price( string $delivery_type ): float {
+			$map = [
+				'office'  => 'fixed_shipping_office',
+				'automat' => 'fixed_shipping_automat',
+				'address' => 'fixed_shipping_address',
+			];
+
+			$key = $map[ $delivery_type ] ?? '';
+			return $key ? (float) $this->get_option( $key, 0 ) : 0.0;
+		}
+
+		/* ───────────────────────────────────────────────────
+		 *  HELPER: CSV file-based pricing
+		 * ─────────────────────────────────────────────────── */
+
+		/**
+		 * Look up shipping cost from a user-uploaded CSV price file.
+		 *
+		 * CSV format (header + data rows):
+		 *   service_id, take_from_office, weight, order_total, price
+		 *
+		 * take_from_office: 0 = address, 1 = office, 2 = automat
+		 *
+		 * @param string $delivery_type 'address', 'office', or 'automat'
+		 * @param float  $weight        Shipment weight.
+		 * @param float  $subtotal      Cart subtotal.
+		 * @return float|false Price from CSV, or false if no match found.
+		 */
+		private function get_csv_file_price( string $delivery_type, float $weight, float $subtotal ) {
+			// Try instance option first, then legacy global option
+			$file_path = $this->get_option( 'fileceni' );
+			if ( empty( $file_path ) || ! file_exists( $file_path ) ) {
+				$file_path = get_option( 'speedy_fileceni_path' );
+			}
+
+			if ( empty( $file_path ) || ! file_exists( $file_path ) ) {
 				return false;
 			}
 
-			$data = json_decode( $response, true );
+			// Map delivery type to CSV column value
+			$type_map = [
+				'address' => 0,
+				'office'  => 1,
+				'automat' => 2,
+			];
+			$take_from_office = $type_map[ $delivery_type ] ?? 0;
 
-			// Check if the API returned a valid total amount
-			if ( isset( $data['amounts']['total'] ) ) {
-				return $data['amounts']['total'];
+			$handle = fopen( $file_path, 'r' );
+			if ( false === $handle ) {
+				return false;
 			}
 
-			return false;
+			// Skip header row
+			fgetcsv( $handle, 0, ',', '"', '' );
+
+			$best_fit_price       = null;
+			$best_fit_order_total = null;
+
+			while ( ( $row = fgetcsv( $handle, 0, ',', '"', '' ) ) !== false ) {
+				if ( count( $row ) < 5 ) {
+					continue;
+				}
+
+				list( $csv_service_id, $csv_take_from_office, $csv_weight, $csv_order_total, $csv_price ) = $row;
+
+				if (
+					(int) $csv_take_from_office === $take_from_office &&
+					$weight <= (float) $csv_weight &&
+					$subtotal <= (float) $csv_order_total
+				) {
+					// Pick the row with the smallest csv_order_total that still covers this order
+					if ( null === $best_fit_order_total || (float) $csv_order_total < $best_fit_order_total ) {
+						$best_fit_order_total = (float) $csv_order_total;
+						$best_fit_price       = (float) $csv_price;
+					}
+				}
+			}
+
+			fclose( $handle );
+
+			return $best_fit_price;
+		}
+
+		/* ───────────────────────────────────────────────────
+		 *  HELPER: Build full Speedy /v1/calculate payload
+		 * ─────────────────────────────────────────────────── */
+
+		/**
+		 * Assemble the Speedy API calculate request body.
+		 *
+		 * The old plugin always sends the full payload to the API even when
+		 * the final cost will be overridden (free / fixed / file). When a
+		 * pricing override is active, the courier payer is forced to SENDER
+		 * and the COD amount is adjusted to subtotal + shipping cost.
+		 *
+		 * @param string     $delivery_type   'address', 'office', or 'automat'
+		 * @param int        $office_id       Speedy office/automat ID.
+		 * @param int        $city_id         Speedy city (site) ID.
+		 * @param float      $order_weight    Shipment weight in kg.
+		 * @param float      $order_total     Order total minus shipping.
+		 * @param float      $subtotal        Cart subtotal.
+		 * @param bool       $is_cod          Whether payment is Cash on Delivery.
+		 * @param string     $payment_method  WC payment method slug.
+		 * @param bool       $is_free         Whether free shipping is active.
+		 * @param float|null $fixed_price     Fixed shipping cost (null = not active).
+		 * @param float|null $file_price      CSV file shipping cost (null = not active).
+		 * @return array The API request payload (without credentials).
+		 */
+		private function build_api_calculate_payload(
+			string $delivery_type,
+			int $office_id,
+			int $city_id,
+			float $order_weight,
+			float $order_total,
+			float $subtotal,
+			bool $is_cod,
+			string $payment_method,
+			bool $is_free = false,
+			?float $fixed_price = null,
+			?float $file_price = null
+		): array {
+
+			$has_price_override = $is_free || null !== $fixed_price || null !== $file_price;
+
+			// ── Sender ──
+			// For price calculation, send an empty sender — the API uses the
+			// authenticated user's default contract settings. All sender details
+			// (clientId, phone, name, email, dropoffOfficeId) are only needed for
+			// waybill creation and are injected into the session data separately.
+			$sender = new \stdClass(); // Forces JSON {} instead of []
+
+			// ── Recipient ──
+			$recipient = [
+				'privatePerson' => true,
+			];
+
+			if ( in_array( $delivery_type, [ 'office', 'automat' ], true ) ) {
+				$recipient['pickupOfficeId'] = $office_id;
+			} else {
+				$recipient['addressLocation'] = [
+					'siteId' => $city_id,
+				];
+			}
+
+			// ── Service ──
+			$service_ids = $this->get_option( 'uslugi', [] );
+			if ( ! is_array( $service_ids ) ) {
+				$service_ids = array_map( 'intval', explode( ',', $service_ids ) );
+			} else {
+				$service_ids = array_map( 'intval', $service_ids );
+			}
+			// Remove zeroes and ensure we have at least one service
+			$service_ids = array_values( array_filter( $service_ids ) );
+			if ( empty( $service_ids ) ) {
+				$service_ids = [ 505 ]; // Default: Standard courier
+			}
+
+			$service = [
+				'autoAdjustPickupDate' => true,
+				'serviceIds'           => $service_ids,
+			];
+
+			if ( 'YES' === $this->get_option( 'saturdayoption' ) ) {
+				$service['saturdayDelivery'] = true;
+			}
+
+			// ── Content ──
+			$content = [
+				'parcelsCount' => 1,
+				'totalWeight'  => $order_weight,
+			];
+
+			// ── Payment ──
+			$include_shipping_in_cod = ( 'YES' === $this->get_option( 'includeshippingprice' ) );
+
+			// Old plugin logic: payer is RECIPIENT only when ALL of:
+			//   1. COD payment
+			//   2. includeshippingprice is not YES
+			//   3. cenadostavka is 'speedycalculator' or 'nadbavka' (pure API pricing)
+			// For all other pricing modes (fileprices, fixedprices, freeshipping)
+			// or when includeshippingprice is YES, use SENDER — matching old plugin.
+			$cenadostavka_mode = $this->get_option( 'cenadostavka', 'speedycalculator' );
+			$api_pricing_modes = [ 'speedycalculator', 'nadbavka' ];
+
+			if ( $is_cod && ! $include_shipping_in_cod && in_array( $cenadostavka_mode, $api_pricing_modes, true ) && ! $has_price_override ) {
+				$payment = [ 'courierServicePayer' => 'RECIPIENT' ];
+			} else {
+				$payment = [ 'courierServicePayer' => 'SENDER' ];
+			}
+
+			if ( 'YES' === $this->get_option( 'administrative' ) ) {
+				$payment['administrativeFee'] = true;
+			}
+
+			// ── Additional Services ──
+
+			if ( $is_cod ) {
+				$money_transfer  = $this->get_option( 'moneytransfer', 'NO' );
+				$processing_type = ( 'YES' === $money_transfer ) ? 'POSTAL_MONEY_TRANSFER' : 'CASH';
+
+				// COD amount: base is full cart total
+				$cod_amount = (float) ( WC()->cart ? WC()->cart->get_totals()['total'] : $order_total );
+
+				// For fixed/file pricing with COD, the old plugin sets cod.amount
+				// to subtotal + shipping cost so the courier collects the right total.
+				if ( null !== $fixed_price ) {
+					$cod_amount = $subtotal + $fixed_price;
+				} elseif ( null !== $file_price ) {
+					$cod_amount = $subtotal + $file_price;
+				} elseif ( 'nadbavka' === $this->get_option( 'cenadostavka' ) ) {
+					// Surcharge mode: add surcharge to COD amount
+					$cod_amount += (float) $this->get_option( 'suma_nadbavka', 0 );
+				}
+
+				$service['additionalServices']['cod'] = [
+					'amount'         => $cod_amount,
+					'processingType' => $processing_type,
+				];
+
+				if ( $include_shipping_in_cod ) {
+					$service['additionalServices']['cod']['includeShippingPrice'] = true;
+				}
+
+				// Declared Value (old plugin only adds this inside COD branch)
+				if ( 'YES' === $this->get_option( 'obqvena' ) ) {
+					$service['additionalServices']['declaredValue'] = [
+						'amount'  => (float) $order_total,
+						'fragile' => ( 'YES' === $this->get_option( 'chuplivost' ) ),
+					];
+				}
+
+				// Return Voucher (old plugin only adds inside COD branch)
+				if ( 'YES' === $this->get_option( 'vaucher' ) ) {
+					$voucher = [
+						'serviceId' => 505,
+						'payer'     => $this->get_option( 'vaucherpayer', 'SENDER' ),
+					];
+
+					$validity = $this->get_option( 'vaucherpayerdays' );
+					if ( ! empty( $validity ) ) {
+						$voucher['validityPeriod'] = (int) $validity;
+					}
+
+					$service['additionalServices']['returns']['returnVoucher'] = $voucher;
+				}
+
+				// Special Delivery Requirements (old plugin only adds inside COD branch)
+				$special_req = $this->get_option( 'special_requirements' );
+				if ( ! empty( $special_req ) && '0' !== $special_req ) {
+					$service['additionalServices']['specialDeliveryId'] = $special_req;
+				}
+			} else {
+				// Non-COD: explicitly set COD amount to 0 (matches old plugin)
+				$service['additionalServices']['cod'] = [
+					'amount' => 0,
+				];
+			}
+
+			// OBPD (Test Before Pay / Open Before Pay)
+			// Old plugin adds this regardless of COD status
+			$obpd_option = $this->get_option( 'test_before_pay', 'NO' );
+			$autoclose   = $this->get_option( 'autoclose', 'NO' );
+
+			if (
+				in_array( $obpd_option, [ 'OPEN', 'TEST' ], true ) &&
+				( 'automat' !== $delivery_type || 'NO' === $autoclose )
+			) {
+				$service['additionalServices']['obpd'] = [
+					'option'                  => $obpd_option,
+					'returnShipmentServiceId' => 505,
+					'returnShipmentPayer'     => ( 'OPEN' === $obpd_option )
+						? ( $this->get_option( 'testplatec' ) ?: 'SENDER' )
+						: 'SENDER',
+				];
+			}
+
+			// ── Fiscal Receipt Items (for fiscal / fiscalone modes) ──
+			$money_transfer_mode = $this->get_option( 'moneytransfer', 'NO' );
+			if ( $is_cod && in_array( $money_transfer_mode, [ 'fiscal', 'fiscalone' ], true ) && WC()->cart ) {
+				$cenadostavka_mode = $this->get_option( 'cenadostavka', 'speedycalculator' );
+				$fiscal_items      = $this->build_fiscal_receipt_items( $money_transfer_mode, $cenadostavka_mode, $service['additionalServices']['cod']['amount'] ?? 0 );
+				if ( ! empty( $fiscal_items ) ) {
+					$service['additionalServices']['cod']['fiscalReceiptItems'] = $fiscal_items;
+				}
+			}
+
+			return [
+				'sender'    => $sender,
+				'recipient' => $recipient,
+				'service'   => $service,
+				'content'   => $content,
+				'payment'   => $payment,
+			];
+		}
+
+		/* ───────────────────────────────────────────────────
+		 *  HELPER: Build fiscal receipt items
+		 * ─────────────────────────────────────────────────── */
+
+		/**
+		 * Generate fiscal receipt line items for the Speedy COD fiscal receipt.
+		 *
+		 * When fixedprices or fileprices is active and cod_amount exceeds the
+		 * product total, a separate "Доставка" (Delivery) line is appended
+		 * to cover the shipping portion – matching the old plugin behavior.
+		 *
+		 * @param string $mode            'fiscal' (per-item) or 'fiscalone' (per VAT group).
+		 * @param string $cenadostavka    Pricing mode setting.
+		 * @param float  $cod_amount      Total COD amount from the payload.
+		 * @return array Array of fiscal receipt items.
+		 */
+		private function build_fiscal_receipt_items( string $mode, string $cenadostavka = '', float $cod_amount = 0.0 ): array {
+			$fiscal_items            = [];
+			$products_total_with_vat = 0.0;
+
+			if ( 'fiscal' === $mode ) {
+				// Per-product line items
+				foreach ( WC()->cart->get_cart() as $cart_item ) {
+					$product     = $cart_item['data'];
+					$qty         = $cart_item['quantity'];
+					$name        = $product->get_name() . ' (x' . $qty . ')';
+					$description = mb_substr( $name, 0, 50 );
+
+					$vat_info = $this->resolve_vat_info( $product );
+
+					$price_incl_vat = (float) $product->get_price();
+					$price_excl_vat = $vat_info['rate'] > 0
+						? $price_incl_vat / ( 1 + $vat_info['rate'] )
+						: $price_incl_vat;
+
+					$line_with_vat = round( $price_incl_vat * $qty, 2 );
+					$line_ex_vat   = round( $price_excl_vat * $qty, 2 );
+
+					$products_total_with_vat += $line_with_vat;
+
+					$fiscal_items[] = [
+						'description'   => $description,
+						'vatGroup'      => $vat_info['group'],
+						'amount'        => $line_ex_vat,
+						'amountWithVat' => $line_with_vat,
+					];
+				}
+			} elseif ( 'fiscalone' === $mode ) {
+				// Grouped by VAT class
+				$groups = [
+					'А' => [ 'ex' => 0, 'in' => 0 ], // 0%
+					'Г' => [ 'ex' => 0, 'in' => 0 ], // 9%
+					'Б' => [ 'ex' => 0, 'in' => 0 ], // 20%
+				];
+
+				foreach ( WC()->cart->get_cart() as $cart_item ) {
+					$product = $cart_item['data'];
+					$qty     = $cart_item['quantity'];
+
+					$vat_info       = $this->resolve_vat_info( $product );
+					$price_incl_vat = (float) $product->get_price();
+					$price_excl_vat = $vat_info['rate'] > 0
+						? $price_incl_vat / ( 1 + $vat_info['rate'] )
+						: $price_incl_vat;
+
+					$groups[ $vat_info['group'] ]['ex'] += $price_excl_vat * $qty;
+					$groups[ $vat_info['group'] ]['in'] += $price_incl_vat * $qty;
+				}
+
+				foreach ( $groups as $group => $sum ) {
+					if ( $sum['in'] <= 0 ) {
+						continue;
+					}
+
+					$products_total_with_vat += $sum['in'];
+
+					$fiscal_items[] = [
+						'description'   => 'Продукти от поръчка (група ' . $group . ')',
+						'vatGroup'      => $group,
+						'amount'        => round( $sum['ex'], 2 ),
+						'amountWithVat' => round( $sum['in'], 2 ),
+					];
+				}
+			}
+
+			// Append a "Доставка" (Delivery) line when fixed/file pricing is used
+			// and the COD amount exceeds the product total.
+			if (
+				in_array( $cenadostavka, [ 'fixedprices', 'fileprices' ], true ) &&
+				$cod_amount > 0
+			) {
+				$shipping_amount_with_vat = max( 0, $cod_amount - $products_total_with_vat );
+
+				if ( $shipping_amount_with_vat > 0 ) {
+					$shipping_vat_rate      = 0.20;
+					$shipping_amount_ex_vat = $shipping_amount_with_vat / ( 1 + $shipping_vat_rate );
+
+					$fiscal_items[] = [
+						'description'   => 'Доставка',
+						'vatGroup'      => 'Б',
+						'amount'        => round( $shipping_amount_ex_vat, 2 ),
+						'amountWithVat' => round( $shipping_amount_with_vat, 2 ),
+					];
+				}
+			}
+
+			return $fiscal_items;
+		}
+
+		/* ───────────────────────────────────────────────────
+		 *  HELPER: Resolve VAT info for a product
+		 * ─────────────────────────────────────────────────── */
+
+		/**
+		 * Get the Bulgarian VAT group and rate for a WC product.
+		 *
+		 * @param WC_Product $product
+		 * @return array { @type string $group, @type float $rate }
+		 */
+		private function resolve_vat_info( $product ): array {
+			$tax_class = $product->get_tax_class();
+
+			if ( 'zero-rate' === $tax_class ) {
+				return [ 'group' => 'А', 'rate' => 0.00 ];
+			}
+
+			if ( 'reduced-rate' === $tax_class ) {
+				return [ 'group' => 'Г', 'rate' => 0.09 ];
+			}
+
+			// Standard rate (default)
+			return [ 'group' => 'Б', 'rate' => 0.20 ];
+		}
+
+		/* ───────────────────────────────────────────────────
+		 *  HELPER: Call Speedy /v1/calculate API
+		 * ─────────────────────────────────────────────────── */
+
+		/**
+		 * Send a calculate request to the Speedy API.
+		 *
+		 * Uses wp_remote_post() instead of raw cURL for WordPress best practices.
+		 *
+		 * @param array $payload Full request body including credentials.
+		 * @return array|WP_Error Decoded API response or WP_Error.
+		 */
+		private function call_speedy_calculate_api( array $payload ) {
+			// Debug: log the payload (without credentials)
+			$debug_payload = $payload;
+			unset( $debug_payload['userName'], $debug_payload['password'] );
+			error_log( 'Speedy Modern: API request payload – ' . wp_json_encode( $debug_payload ) );
+
+			$response = wp_remote_post( 'https://api.speedy.bg/v1/calculate', [
+				'headers' => [
+					'Content-Type' => 'application/json',
+					'Accept'       => 'application/json',
+				],
+				'body'    => wp_json_encode( $payload ),
+				'timeout' => 15,
+			] );
+
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+
+			$code = wp_remote_retrieve_response_code( $response );
+			$body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+			// Debug: log the response
+			error_log( 'Speedy Modern: API response (HTTP ' . $code . ') – ' . wp_remote_retrieve_body( $response ) );
+
+			if ( $code < 200 || $code >= 300 ) {
+				$api_msg = $body['error']['message'] ?? "HTTP $code";
+				return new WP_Error( 'speedy_api_error', $api_msg );
+			}
+
+			return $body;
 		}
 	}
 }
