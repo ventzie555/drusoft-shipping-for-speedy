@@ -48,6 +48,10 @@ add_action( 'plugins_loaded', 'speedy_modern_load_dependencies' );
 function speedy_modern_load_dependencies(): void {
 	require_once SPEEDY_MODERN_PATH . 'class-speedy-modern-method.php';
 	require_once SPEEDY_MODERN_PATH . 'includes/class-speedy-modern-syncer.php';
+	require_once SPEEDY_MODERN_PATH . 'includes/class-speedy-modern-waybill-generator.php';
+	require_once SPEEDY_MODERN_PATH . 'includes/admin/class-speedy-modern-admin-menu.php';
+	require_once SPEEDY_MODERN_PATH . 'includes/admin/class-speedy-modern-actions.php';
+	require_once SPEEDY_MODERN_PATH . 'includes/admin/class-speedy-modern-order-metabox.php';
 }
 
 /**
@@ -155,6 +159,7 @@ function speedy_modern_enqueue_scripts(): void {
 				'select_from_map' => __( 'Select from Map', 'speedy-modern' ),
 				'select_city' => __( 'Select a city...', 'speedy-modern' ),
 				'alert_select_city' => __( 'Please select a city first.', 'speedy-modern' ),
+				'no_results' => __( 'No results', 'speedy-modern' ),
 			)
 		));
 	}
@@ -680,6 +685,88 @@ function speedy_modern_get_region_by_city_ajax(): void {
  * Ensures an office is selected if the user chose "To Office" or "To Automat".
  */
 add_action( 'woocommerce_checkout_process', 'speedy_modern_validate_checkout' );
+
+/**
+ * AJAX Handler: Search streets by name within a city.
+ * Calls the Speedy /v1/location/street endpoint.
+ * Strips common Bulgarian street prefixes (ул., улица, бул., булевард, etc.)
+ */
+add_action( 'wp_ajax_speedy_modern_search_streets', 'speedy_modern_search_streets_ajax' );
+add_action( 'wp_ajax_nopriv_speedy_modern_search_streets', 'speedy_modern_search_streets_ajax' );
+
+function speedy_modern_search_streets_ajax(): void {
+	$site_id = isset( $_POST['siteId'] ) ? absint( $_POST['siteId'] ) : 0;
+	$query   = isset( $_POST['name'] ) ? sanitize_text_field( $_POST['name'] ) : '';
+
+	if ( ! $site_id || mb_strlen( $query ) < 2 ) {
+		wp_send_json( [] );
+	}
+
+	// Strip common Bulgarian street type prefixes so the API gets
+	// just the actual street name for matching.
+	$prefixes = [
+		// Cyrillic
+		'улица',  'ул\.',  'ул ',
+		'булевард', 'бул\.',  'бул ',
+		'площад', 'пл\.',  'пл ',
+		'жк',     'ж\.к\.',
+		// Latin transliterations
+		'ulitsa', 'ulica', 'ul\.',  'ul ',
+		'bulevard', 'boulevard', 'bul\.',  'bul ',
+		'ploshtad', 'pl\.',  'pl ',
+	];
+	$pattern = '/^(' . implode( '|', $prefixes ) . ')\s*/iu';
+	$clean_query = preg_replace( $pattern, '', $query );
+
+	// If everything was stripped, use original
+	if ( empty( trim( $clean_query ) ) ) {
+		$clean_query = $query;
+	}
+
+	$credentials = speedy_modern_get_first_credentials();
+	if ( ! $credentials ) {
+		wp_send_json( [] );
+	}
+
+	$payload = [
+		'userName' => $credentials['username'],
+		'password' => $credentials['password'],
+		'siteId'   => $site_id,
+		'name'     => trim( $clean_query ),
+	];
+
+	$response = wp_remote_post( 'https://api.speedy.bg/v1/location/street', [
+		'headers' => [ 'Content-Type' => 'application/json' ],
+		'body'    => wp_json_encode( $payload ),
+		'timeout' => 10,
+	] );
+
+	if ( is_wp_error( $response ) ) {
+		wp_send_json( [] );
+	}
+
+	$body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+	$results = [];
+	if ( ! empty( $body['streets'] ) && is_array( $body['streets'] ) ) {
+		foreach ( $body['streets'] as $street ) {
+			$label = $street['type'] ?? '';
+			if ( ! empty( $label ) ) {
+				$label .= ' ';
+			}
+			$label .= $street['name'] ?? '';
+
+			$results[] = [
+				'id'   => $street['id'] ?? 0,
+				'name' => $street['name'] ?? '',
+				'type' => $street['type'] ?? '',
+				'label' => trim( $label ),
+			];
+		}
+	}
+
+	wp_send_json( $results );
+}
 function speedy_modern_validate_checkout(): void {
 	// Check if Speedy Modern is the selected shipping method
 	$chosen_methods = WC()->session->get( 'chosen_shipping_methods' );

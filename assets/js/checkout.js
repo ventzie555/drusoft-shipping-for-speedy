@@ -373,6 +373,8 @@
             isSpeedyActive = false;
             console.log('Speedy Modern Deactivated on ' + currentContext);
 
+            setWcAutocompleteProvider(false);
+
             $('body').off('change.speedy');
             restoreOriginalFields();
             restoreFieldOrder();
@@ -650,10 +652,14 @@
                 $address2Field.show();
                 $address1Field.find('input').val('');
                 $address2Field.find('input').val('');
+                // Register so WC skips keydown/change/blur updates on address_1
+                setWcAutocompleteProvider(true);
             } else {
                 $address1Field.hide();
                 $address2Field.hide();
-                
+                // Unregister — address fields are hidden, no autocomplete needed
+                setWcAutocompleteProvider(false);
+
                 if (type === 'office') {
                     $address1Field.find('input').val(params.i18n.to_office);
                 } else if (type === 'automat') {
@@ -777,6 +783,213 @@
             }
             return result;
         }
+
+        // ── Street Autocomplete ──
+        // When delivery type is 'address' and a city is selected, suggest
+        // streets from the Speedy nomenclature as the user types in address_1.
+        let streetAutocompleteOpen = false;
+
+        // Register / unregister as a WC address autocomplete provider.
+        // WC's queue_update_checkout (keydown) checks this BEFORE setting
+        // its 1-second update timer. We must register BEFORE the user types.
+        function setWcAutocompleteProvider(active) {
+            window.wc = window.wc || {};
+            window.wc.addressAutocomplete = window.wc.addressAutocomplete || {};
+            window.wc.addressAutocomplete.activeProvider = window.wc.addressAutocomplete.activeProvider || {};
+            if (active) {
+                window.wc.addressAutocomplete.activeProvider['billing'] = true;
+                window.wc.addressAutocomplete.activeProvider['shipping'] = true;
+            } else {
+                delete window.wc.addressAutocomplete.activeProvider['billing'];
+                delete window.wc.addressAutocomplete.activeProvider['shipping'];
+            }
+        }
+
+        (function initStreetAutocomplete() {
+            let streetTimer = null;
+            let $streetList = null;
+            let streetSelectedIndex = -1;
+            let selectedStreetName = ''; // Track selected street to avoid re-querying
+
+            function getStreetList() {
+                if (!$streetList) {
+                    $streetList = $('<ul id="speedy-street-suggestions">')
+                        .css({
+                            border: '1px solid #ccc',
+                            maxHeight: '200px',
+                            overflow: 'auto',
+                            listStyle: 'none',
+                            padding: '5px',
+                            marginTop: '0',
+                            position: 'absolute',
+                            background: '#fff',
+                            zIndex: 9999,
+                            display: 'none',
+                            width: '100%',
+                            boxSizing: 'border-box'
+                        });
+                }
+                return $streetList;
+            }
+
+            function attachList() {
+                const $input = $('#' + currentContext + '_address_1');
+                if (!$input.length) return;
+                const $wrapper = $input.closest('.woocommerce-input-wrapper, .form-row');
+                $wrapper.css('position', 'relative');
+                const $list = getStreetList();
+                if (!$.contains(document.body, $list[0])) {
+                    $wrapper.append($list);
+                }
+            }
+
+            function highlightItem($items) {
+                $items.css({ background: '', color: '' });
+                if (streetSelectedIndex >= 0 && streetSelectedIndex < $items.length) {
+                    $items.eq(streetSelectedIndex).css({ background: '#007BFF', color: '#fff' });
+                }
+            }
+
+            function suppressWcUpdates() {
+                if (!streetAutocompleteOpen) {
+                    streetAutocompleteOpen = true;
+                    // Set attribute so WC's should_skip_address_update skips
+                    // change events, and should_trigger_address_blur_update
+                    // skips blur events while autocomplete is open.
+                    $('#' + currentContext + '_address_1')
+                        .attr('data-autocomplete-manipulating', 'true');
+                }
+            }
+
+            function restoreWcUpdates() {
+                if (streetAutocompleteOpen) {
+                    streetAutocompleteOpen = false;
+                    $('#' + currentContext + '_address_1')
+                        .removeAttr('data-autocomplete-manipulating');
+                }
+            }
+
+            function selectStreet(street) {
+                const $input = $('#' + currentContext + '_address_1');
+                $input.val(street.label);
+                selectedStreetName = street.label;
+                getStreetList().empty().hide();
+                streetSelectedIndex = -1;
+                restoreWcUpdates();
+            }
+
+            // Listen on input events for the address field — use delegation
+            // because WC may rebuild the field during AJAX updates.
+            $(document.body).on('input', '#billing_address_1, #shipping_address_1', function() {
+                if (!isSpeedyActive) return;
+
+                const deliveryType = $('input[name="speedy_delivery_type"]:checked').val();
+                if (deliveryType !== 'address') return;
+
+                const query = $(this).val();
+                const $cityInput = $('#' + currentContext + '_city');
+                const siteId = $cityInput.val();
+
+                if (!siteId || query.length < 2) {
+                    getStreetList().empty().hide();
+                    restoreWcUpdates();
+                    selectedStreetName = '';
+                    return;
+                }
+
+                // If a street was already selected and the user is just
+                // appending text (street number, block, etc.), don't search again.
+                if (selectedStreetName && query.indexOf(selectedStreetName) === 0) {
+                    return;
+                }
+                // If the user deleted back into the street name, reset the selection
+                if (selectedStreetName && query.indexOf(selectedStreetName) !== 0) {
+                    selectedStreetName = '';
+                }
+
+                suppressWcUpdates();
+
+                clearTimeout(streetTimer);
+                streetTimer = setTimeout(function() {
+                    attachList();
+                    $.ajax({
+                        url: params.ajax_url,
+                        method: 'POST',
+                        data: {
+                            action: 'speedy_modern_search_streets',
+                            siteId: siteId,
+                            name: query
+                        },
+                        success: function(response) {
+                            const $list = getStreetList();
+                            $list.empty();
+                            streetSelectedIndex = -1;
+
+                            if (response && response.length) {
+                                $.each(response, function(i, street) {
+                                    $('<li>')
+                                        .text(street.label)
+                                        .css({ cursor: 'pointer', padding: '4px 6px' })
+                                        .on('mouseenter', function() {
+                                            $(this).css({ background: '#f0f0f0' });
+                                        })
+                                        .on('mouseleave', function() {
+                                            $(this).css({ background: '' });
+                                        })
+                                        .on('click', function() {
+                                            selectStreet(street);
+                                        })
+                                        .appendTo($list);
+                                });
+                                $list.show();
+                            } else {
+                                $('<li>')
+                                    .text(params.i18n.no_results)
+                                    .css({ color: '#999', padding: '4px 6px' })
+                                    .appendTo($list);
+                                $list.show();
+                            }
+                        }
+                    });
+                }, 300); // Debounce 300ms
+            });
+
+            // Keyboard navigation
+            $(document.body).on('keydown', '#billing_address_1, #shipping_address_1', function(e) {
+                const $list = getStreetList();
+                const $items = $list.find('li');
+                if (!$items.length || $list.css('display') === 'none') return;
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    streetSelectedIndex = (streetSelectedIndex + 1) % $items.length;
+                    highlightItem($items);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    streetSelectedIndex = (streetSelectedIndex - 1 + $items.length) % $items.length;
+                    highlightItem($items);
+                } else if (e.key === 'Enter' && streetSelectedIndex >= 0) {
+                    e.preventDefault();
+                    var text = $items.eq(streetSelectedIndex).text();
+                    if (text !== params.i18n.no_results) {
+                        selectStreet({ label: text });
+                    }
+                } else if (e.key === 'Escape') {
+                    $list.empty().hide();
+                    streetSelectedIndex = -1;
+                    restoreWcUpdates();
+                }
+            });
+
+            // Close on outside click
+            $(document).on('click', function(e) {
+                if (!$(e.target).closest('#billing_address_1, #shipping_address_1, #speedy-street-suggestions').length) {
+                    getStreetList().empty().hide();
+                    streetSelectedIndex = -1;
+                    restoreWcUpdates();
+                }
+            });
+        })();
 
         function modelMatcher(params, data) {
             if ($.trim(params.term) === '') {

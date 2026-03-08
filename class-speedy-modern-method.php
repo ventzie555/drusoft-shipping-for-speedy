@@ -42,6 +42,72 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 
 			// Save settings in admin
 			add_action( 'woocommerce_update_options_shipping_' . $this->id, array( $this, 'process_admin_options' ) );
+
+			// Save shipping data to order
+			add_action( 'woocommerce_checkout_create_order', array( $this, 'save_shipping_data_to_order' ), 10, 2 );
+		}
+
+		/**
+		 * Save Speedy session data to the order before it is created.
+		 *
+		 * @param WC_Order $order The order object being created.
+		 * @param array    $data  Posted data.
+		 */
+		public function save_shipping_data_to_order( $order, $data ) {
+			// 1. Check if our shipping method is chosen
+			$chosen_methods = WC()->session->get( 'chosen_shipping_methods' );
+			$is_speedy      = false;
+			$chosen_rate_id = '';
+
+			if ( ! empty( $chosen_methods ) ) {
+				foreach ( $chosen_methods as $method_id ) {
+					if ( 0 === strpos( $method_id, $this->id ) ) {
+						$is_speedy      = true;
+						$chosen_rate_id = $method_id;
+						break;
+					}
+				}
+			}
+
+			if ( ! $is_speedy ) {
+				error_log( 'Speedy Modern: save_shipping_data_to_order — not a Speedy order. Chosen: ' . wp_json_encode( $chosen_methods ) );
+				return;
+			}
+
+			// 2. Extract the service ID from the chosen rate ID
+			//    Rate ID format: "speedy_modern:1_505" or "speedy_modern:1" (legacy/override)
+			$chosen_service_id = 0;
+			if ( preg_match( '/_(\d+)$/', $chosen_rate_id, $matches ) ) {
+				$chosen_service_id = (int) $matches[1];
+			}
+
+			// 3. Try to get the service-specific session data first, fallback to general
+			$session_data = null;
+			if ( $chosen_service_id && WC()->session ) {
+				$session_data = WC()->session->get( 'speedy_modern_shipping_data_' . $chosen_service_id );
+			}
+			if ( empty( $session_data ) ) {
+				$session_data = WC()->session ? WC()->session->get( 'speedy_modern_shipping_data' ) : null;
+			}
+
+			if ( ! empty( $session_data ) ) {
+				// If we know which service was chosen, ensure the payload uses only that service
+				if ( $chosen_service_id ) {
+					$session_data['service']['serviceIds'] = [ $chosen_service_id ];
+					$session_data['_selected_service_id']  = $chosen_service_id;
+				}
+
+				// 4. Save to order meta
+				$order->add_meta_data( '_speedy_order_data', $session_data );
+
+				if ( isset( $session_data['recipient']['pickupOfficeId'] ) ) {
+					$order->add_meta_data( '_speedy_office_id', $session_data['recipient']['pickupOfficeId'] );
+				}
+
+				error_log( 'Speedy Modern: save_shipping_data_to_order — saved _speedy_order_data for order #' . $order->get_id() . ' (service: ' . $chosen_service_id . ')' );
+			} else {
+				error_log( 'Speedy Modern: save_shipping_data_to_order — session data is EMPTY for order #' . $order->get_id() );
+			}
 		}
 
 		/**
@@ -345,6 +411,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'sender_officeyesno' => [
 					'title'   => __( 'Send from Office', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'NO',
 					'options' => [
 						'NO'  => __( 'No', 'speedy-modern' ),
 						'YES' => __( 'Yes', 'speedy-modern' ),
@@ -390,6 +457,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'obqvena' => [
 					'title'   => __( 'Declared Value', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'NO',
 					'options' => [
 						'NO'  => __( 'No', 'speedy-modern' ),
 						'YES' => __( 'Yes', 'speedy-modern' ),
@@ -398,6 +466,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'chuplivost' => [
 					'title'   => __( 'Fragile', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'NO',
 					'options' => [
 						'NO'  => __( 'No', 'speedy-modern' ),
 						'YES' => __( 'Yes', 'speedy-modern' ),
@@ -415,6 +484,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'special_requirements' => [
 					'title'    => __( 'Special Requirements', 'speedy-modern' ),
 					'type'     => 'select',
+					'default'  => '0',
 					'options'  => $this->get_speedy_special_requirements(),
 				],
 
@@ -426,6 +496,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'cenadostavka' => [
 					'title'   => __( 'Pricing Method', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'speedycalculator',
 					'options' => [
 						'speedycalculator' => __( 'Speedy Calculator', 'speedy-modern' ),
 						'fixedprices'      => __( 'Fixed Price', 'speedy-modern' ),
@@ -497,6 +568,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'moneytransfer'          => [
 					'title'   => __( 'Money Transfer Type', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'NO',
 					'options' => [
 						'NO'        => __( 'Cash on Delivery', 'speedy-modern' ),
 						'YES'       => __( 'Postal Money Transfer', 'speedy-modern' ),
@@ -507,20 +579,16 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'includeshippingprice'   => [
 					'title'   => __( 'Include Shipping Price in COD', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'NO',
 					'options' => [
 						'NO'  => __( 'No', 'speedy-modern' ),
 						'YES' => __( 'Yes', 'speedy-modern' ),
 					],
 				],
-				'nachinplashtane'        => [
-					'title'    => __( 'COD Payout Method', 'speedy-modern' ),
-					'type'     => 'text',
-					'default'  => 'по договор',
-					'custom_attributes' => [ 'disabled' => 'disabled' ],
-				],
 				'administrative'         => [
 					'title'   => __( 'Administrative Fee', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'NO',
 					'options' => [
 						'NO'  => __( 'No', 'speedy-modern' ),
 						'YES' => __( 'Yes', 'speedy-modern' ),
@@ -541,6 +609,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'printer'                => [
 					'title'   => __( 'Label Printer', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'NO',
 					'options' => [
 						'NO'  => __( 'No', 'speedy-modern' ),
 						'YES' => __( 'Yes', 'speedy-modern' ),
@@ -549,27 +618,16 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'additionalcopy'         => [
 					'title'   => __( 'Additional Waybill Copy', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'NO',
 					'options' => [
 						'NO'  => __( 'No', 'speedy-modern' ),
 						'YES' => __( 'Yes', 'speedy-modern' ),
 					],
-				],
-				'addressonefield'        => [
-					'title'   => __( 'Address in One Field', 'speedy-modern' ),
-					'type'    => 'select',
-					'options' => [
-						'NO'  => __( 'No', 'speedy-modern' ),
-						'YES' => __( 'Yes', 'speedy-modern' ),
-					],
-				],
-				'fast_checkout'          => [
-					'title'   => __( 'Fast Checkout', 'speedy-modern' ),
-					'type'    => 'checkbox',
-					'default' => 'no'
 				],
 				'test_before_pay' => [
 					'title'   => __( 'Options Before Payment', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'NO',
 					'options' => [
 						'NO'   => __( 'None', 'speedy-modern' ),
 						'OPEN' => __( 'Open', 'speedy-modern' ),
@@ -579,6 +637,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'testplatec'             => [
 					'title'   => __( 'Return Shipment Payer (Test/Open)', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'SENDER',
 					'options' => [
 						'SENDER'    => __( 'Sender', 'speedy-modern' ),
 						'RECIPIENT' => __( 'Recipient', 'speedy-modern' ),
@@ -587,6 +646,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'autoclose'              => [
 					'title'   => __( 'Auto Close Options at Automat', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'NO',
 					'options' => [
 						'NO'  => __( 'No', 'speedy-modern' ),
 						'YES' => __( 'Yes', 'speedy-modern' ),
@@ -601,6 +661,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'vaucher' => [
 					'title'   => __( 'Return Voucher', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'NO',
 					'options' => [
 						'NO'  => __( 'No', 'speedy-modern' ),
 						'YES' => __( 'Yes', 'speedy-modern' ),
@@ -609,6 +670,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				'vaucherpayer' => [
 					'title'   => __( 'Return Payer', 'speedy-modern' ),
 					'type'    => 'select',
+					'default' => 'SENDER',
 					'options' => [
 						'SENDER'    => __( 'Sender', 'speedy-modern' ),
 						'RECIPIENT' => __( 'Recipient', 'speedy-modern' ),
@@ -896,6 +958,25 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 		}
 
 		/**
+		 * Get a simple service ID → name map for rate labels.
+		 *
+		 * Reuses the cached service list from get_speedy_services() and strips
+		 * the "505 - " prefix to return just the name portion.
+		 *
+		 * @return array<int, string> e.g. [505 => 'CITY COURIER', 515 => 'ECONOMY']
+		 */
+		private function get_speedy_service_names(): array {
+			$services = $this->get_speedy_services();
+			$names = [];
+			foreach ( $services as $id => $label ) {
+				// The label is formatted as "505 - CITY COURIER"
+				$parts = explode( ' - ', $label, 2 );
+				$names[ (int) $id ] = $parts[1] ?? $label;
+			}
+			return $names;
+		}
+
+		/**
 		 * Fetch Special Requirements from Speedy API
 		 */
 		private function get_speedy_special_requirements(): array {
@@ -1073,7 +1154,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				}
 			}
 
-			// --- 5. Build the full API payload ---
+			// --- 5. Build the payload (always needed for session / waybill data) ---
 			$payload = $this->build_api_calculate_payload(
 				$delivery_type,
 				$office_id,
@@ -1099,121 +1180,151 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				return;
 			}
 
-			// Add credentials
-			$payload['userName'] = $username;
-			$payload['password'] = $password;
+			// --- 6. Determine final cost ---
+			// When we already know the price (free / fixed / file), skip the API
+			// call entirely — it adds latency and its errors are irrelevant.
+			// The API is only needed for 'speedycalculator' and 'nadbavka' modes.
+			if ( null !== $override_cost ) {
+				$final_cost = $override_cost;
 
-			// Store delivery data in session for future waybill creation.
-			// Re-inject full sender details which were excluded from the calculate
-			// payload to avoid API rejections.
-			$delivery_data_for_session = $payload;
-			unset( $delivery_data_for_session['userName'], $delivery_data_for_session['password'] );
-
-			$full_sender = [];
-			$sender_id = (int) $this->get_option( 'sender_id' );
-			if ( $sender_id > 0 ) {
-				$full_sender['clientId'] = $sender_id;
-			}
-			$sender_phone = $this->get_option( 'sender_phone' );
-			if ( ! empty( $sender_phone ) ) {
-				$full_sender['phone1'] = [ 'number' => $sender_phone ];
-			}
-			$sender_name = $this->get_option( 'sender_name' );
-			if ( ! empty( $sender_name ) ) {
-				$full_sender['contactName'] = $sender_name;
-			}
-			$sender_email = $this->get_option( 'sender_email' );
-			if ( ! empty( $sender_email ) ) {
-				$full_sender['email'] = $sender_email;
-			}
-			if ( 'YES' === $this->get_option( 'sender_officeyesno' ) ) {
-				$drop_off = (int) $this->get_option( 'sender_office' );
-				if ( $drop_off > 0 ) {
-					$full_sender['dropoffOfficeId'] = $drop_off;
+				// Store cost in session
+				if ( WC()->session ) {
+					WC()->session->set( 'speedy_modern_shipping_cost', $final_cost );
+					WC()->session->set( 'speedy_modern_shipping_data', $payload );
 				}
-			}
-			$delivery_data_for_session['sender'] = $full_sender;
 
-			if ( WC()->session ) {
-				WC()->session->set( 'speedy_modern_shipping_data', $delivery_data_for_session );
-			}
+				// Append "free shipping" hint to the label
+				$label = $this->title;
+				if ( $is_free_shipping ) {
+					$label .= ' (' . __( 'Free shipping', 'speedy-modern' ) . ')';
+				}
 
-			// --- 6. Call the Speedy Calculator API ---
-			$response = $this->call_speedy_calculate_api( $payload );
-
-			if ( is_wp_error( $response ) ) {
-				error_log( 'Speedy Modern: Calculate API error – ' . $response->get_error_message() );
-				// API failed – use override cost if available, or show last known cost, or fallback to 0
-				$fallback = $override_cost ?? ( WC()->session ? WC()->session->get( 'speedy_modern_shipping_cost', 0 ) : 0 );
 				$this->add_rate( [
 					'id'    => $this->get_rate_id(),
-					'label' => $this->title,
-					'cost'  => number_format( (float) $fallback, 2, '.', '' ),
+					'label' => $label,
+					'cost'  => number_format( $final_cost, 2, '.', '' ),
 				] );
-				return;
-			}
+			} else {
+				// We need the Speedy API price — call the calculator.
+				$payload['userName'] = $username;
+				$payload['password'] = $password;
 
-			// Check for top-level API error (returned when calculations array is empty)
-			if ( ! empty( $response['error'] ) ) {
-				$error_msg = $response['error']['message'] ?? 'Unknown API error';
-				error_log( 'Speedy Modern: API top-level error – ' . $error_msg );
-				$fallback = $override_cost ?? ( WC()->session ? WC()->session->get( 'speedy_modern_shipping_cost', 0 ) : 0 );
-				$this->add_rate( [
-					'id'    => $this->get_rate_id(),
-					'label' => $this->title,
-					'cost'  => number_format( (float) $fallback, 2, '.', '' ),
-				] );
-				return;
-			}
+				$response = $this->call_speedy_calculate_api( $payload );
 
-			// Extract cost from API response — find the first successful calculation.
-			// When multiple serviceIds are sent, some may succeed while others fail.
-			$api_total = null;
-			if ( ! empty( $response['calculations'] ) ) {
-				foreach ( $response['calculations'] as $calc ) {
-					if ( isset( $calc['price']['total'] ) ) {
-						$api_total = (float) $calc['price']['total'];
-						break;
+				if ( is_wp_error( $response ) ) {
+					error_log( 'Speedy Modern: Calculate API error – ' . $response->get_error_message() );
+					$fallback = WC()->session ? WC()->session->get( 'speedy_modern_shipping_cost', 0 ) : 0;
+					$this->add_rate( [
+						'id'    => $this->get_rate_id(),
+						'label' => $this->title,
+						'cost'  => number_format( (float) $fallback, 2, '.', '' ),
+					] );
+					return;
+				}
+
+				// Check for top-level API error
+				if ( ! empty( $response['error'] ) ) {
+					$error_msg = $response['error']['message'] ?? 'Unknown API error';
+					error_log( 'Speedy Modern: API top-level error – ' . $error_msg );
+					$fallback = WC()->session ? WC()->session->get( 'speedy_modern_shipping_cost', 0 ) : 0;
+					$this->add_rate( [
+						'id'    => $this->get_rate_id(),
+						'label' => $this->title,
+						'cost'  => number_format( (float) $fallback, 2, '.', '' ),
+					] );
+					return;
+				}
+
+				// Collect all successful calculations
+				$successful_calcs = [];
+				if ( ! empty( $response['calculations'] ) ) {
+					foreach ( $response['calculations'] as $calc ) {
+						if ( isset( $calc['price']['total'] ) && isset( $calc['serviceId'] ) ) {
+							$successful_calcs[] = $calc;
+						}
+					}
+				}
+
+				if ( empty( $successful_calcs ) ) {
+					$error_msg = $response['calculations'][0]['error']['message']
+						?? $response['error']['message']
+						?? 'No successful calculation returned';
+					error_log( 'Speedy Modern: All calculations failed – ' . $error_msg );
+					$fallback = WC()->session ? WC()->session->get( 'speedy_modern_shipping_cost', 0 ) : 0;
+					$this->add_rate( [
+						'id'    => $this->get_rate_id(),
+						'label' => $this->title,
+						'cost'  => number_format( (float) $fallback, 2, '.', '' ),
+					] );
+					return;
+				}
+
+				// Build a service ID → name map from the settings
+				$service_names = $this->get_speedy_service_names();
+
+				// Remove credentials before storing in session
+				$session_payload = $payload;
+				unset( $session_payload['userName'], $session_payload['password'] );
+
+				// Add a separate shipping rate for each successful service
+				$is_single = ( count( $successful_calcs ) === 1 );
+				foreach ( $successful_calcs as $calc ) {
+					$service_id = (int) $calc['serviceId'];
+					$api_total  = (float) $calc['price']['total'];
+
+					$final_cost = $api_total;
+					if ( 'nadbavka' === $cenadostavka ) {
+						$final_cost += (float) $this->get_option( 'suma_nadbavka', 0 );
+					}
+
+					// Build label: "Speedy Modern (Standard Courier)" or just "Speedy Modern" if single
+					if ( $is_single ) {
+						$label   = $this->title;
+						$rate_id = $this->get_rate_id();
+					} else {
+						$service_name = $service_names[ $service_id ] ?? ( __( 'Service', 'speedy-modern' ) . ' ' . $service_id );
+						$label   = $this->title . ' (' . $service_name . ')';
+						$rate_id = $this->get_rate_id() . '_' . $service_id;
+					}
+
+					// Store a per-service payload in session so the waybill uses the correct service
+					$service_payload = $session_payload;
+					$service_payload['service']['serviceIds'] = [ $service_id ];
+					$service_payload['_selected_service_id']  = $service_id;
+
+					if ( WC()->session ) {
+						WC()->session->set( 'speedy_modern_shipping_data_' . $service_id, $service_payload );
+					}
+
+					$this->add_rate( [
+						'id'        => $rate_id,
+						'label'     => $label,
+						'cost'      => number_format( $final_cost, 2, '.', '' ),
+						'meta_data' => [ 'speedy_service_id' => $service_id ],
+					] );
+				}
+
+				// Store the first calculation's cost as the default in session
+				if ( WC()->session ) {
+					$first_cost = (float) $successful_calcs[0]['price']['total'];
+					if ( 'nadbavka' === $cenadostavka ) {
+						$first_cost += (float) $this->get_option( 'suma_nadbavka', 0 );
+					}
+					WC()->session->set( 'speedy_modern_shipping_cost', $first_cost );
+
+					// For single service: store the specific service payload as the base
+					// so waybill generation uses the correct service even without a suffix in the rate ID.
+					// For multiple services: store the full payload (selected service comes from rate ID).
+					if ( $is_single ) {
+						$single_payload = $session_payload;
+						$single_payload['service']['serviceIds'] = [ (int) $successful_calcs[0]['serviceId'] ];
+						$single_payload['_selected_service_id']  = (int) $successful_calcs[0]['serviceId'];
+						WC()->session->set( 'speedy_modern_shipping_data', $single_payload );
+					} else {
+						WC()->session->set( 'speedy_modern_shipping_data', $session_payload );
 					}
 				}
 			}
-
-			if ( null === $api_total ) {
-				// Log the first calculation error for debugging
-				$error_msg = $response['calculations'][0]['error']['message']
-					?? $response['error']['message']
-					?? 'No successful calculation returned';
-				error_log( 'Speedy Modern: All calculations failed – ' . $error_msg );
-				$fallback = $override_cost ?? ( WC()->session ? WC()->session->get( 'speedy_modern_shipping_cost', 0 ) : 0 );
-				$this->add_rate( [
-					'id'    => $this->get_rate_id(),
-					'label' => $this->title,
-					'cost'  => number_format( (float) $fallback, 2, '.', '' ),
-				] );
-				return;
-			}
-
-			// --- 7. Determine the final displayed cost ---
-			if ( null !== $override_cost ) {
-				$final_cost = $override_cost;
-			} else {
-				$final_cost = $api_total;
-
-				if ( 'nadbavka' === $cenadostavka ) {
-					$final_cost += (float) $this->get_option( 'suma_nadbavka', 0 );
-				}
-			}
-
-			// Store cost in session
-			if ( WC()->session ) {
-				WC()->session->set( 'speedy_modern_shipping_cost', $final_cost );
-			}
-
-			$this->add_rate( [
-				'id'    => $this->get_rate_id(),
-				'label' => $this->title,
-				'cost'  => number_format( $final_cost, 2, '.', '' ),
-			] );
 		}
 
 		/* ───────────────────────────────────────────────────
@@ -1467,11 +1578,42 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 			$has_price_override = $is_free || null !== $fixed_price || null !== $file_price;
 
 			// ── Sender ──
-			// For price calculation, send an empty sender — the API uses the
-			// authenticated user's default contract settings. All sender details
-			// (clientId, phone, name, email, dropoffOfficeId) are only needed for
-			// waybill creation and are injected into the session data separately.
-			$sender = new \stdClass(); // Forces JSON {} instead of []
+			// The Speedy /v1/calculate API requires sender data to determine
+			// pricing based on the sender's contract and location. This matches
+			// the old plugin behavior which always includes full sender details.
+			$sender = [];
+
+			$sender_id = (int) $this->get_option( 'sender_id' );
+			if ( $sender_id > 0 ) {
+				$sender['clientId'] = $sender_id;
+			}
+
+			$sender_phone = $this->get_option( 'sender_phone' );
+			if ( ! empty( $sender_phone ) ) {
+				$sender['phone1'] = [ 'number' => $sender_phone ];
+			}
+
+			$sender_name = $this->get_option( 'sender_name' );
+			if ( ! empty( $sender_name ) ) {
+				$sender['contactName'] = $sender_name;
+			}
+
+			$sender_email = $this->get_option( 'sender_email' );
+			if ( ! empty( $sender_email ) ) {
+				$sender['email'] = $sender_email;
+			}
+
+			if ( 'YES' === $this->get_option( 'sender_officeyesno' ) ) {
+				$drop_off = (int) $this->get_option( 'sender_office' );
+				if ( $drop_off > 0 ) {
+					$sender['dropoffOfficeId'] = $drop_off;
+				}
+			}
+
+			// If no sender data was set, send empty object so JSON encodes as {}
+			if ( empty( $sender ) ) {
+				$sender = new \stdClass();
+			}
 
 			// ── Recipient ──
 			$recipient = [
@@ -1526,11 +1668,15 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 			$cenadostavka_mode = $this->get_option( 'cenadostavka', 'speedycalculator' );
 			$api_pricing_modes = [ 'speedycalculator', 'nadbavka' ];
 
+			// TODO: TEMPORARY – force SENDER payer for testing (remove after testing)
+			$payment = [ 'courierServicePayer' => 'SENDER' ];
+			/*
 			if ( $is_cod && ! $include_shipping_in_cod && in_array( $cenadostavka_mode, $api_pricing_modes, true ) && ! $has_price_override ) {
 				$payment = [ 'courierServicePayer' => 'RECIPIENT' ];
 			} else {
 				$payment = [ 'courierServicePayer' => 'SENDER' ];
 			}
+			*/
 
 			if ( 'YES' === $this->get_option( 'administrative' ) ) {
 				$payment['administrativeFee'] = true;
@@ -1557,8 +1703,9 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				}
 
 				$service['additionalServices']['cod'] = [
-					'amount'         => $cod_amount,
-					'processingType' => $processing_type,
+					'amount'                  => $cod_amount,
+					'processingType'          => $processing_type,
+					'ignoreIfNotApplicable'   => true,
 				];
 
 				if ( $include_shipping_in_cod ) {
@@ -1568,16 +1715,18 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				// Declared Value (old plugin only adds this inside COD branch)
 				if ( 'YES' === $this->get_option( 'obqvena' ) ) {
 					$service['additionalServices']['declaredValue'] = [
-						'amount'  => (float) $order_total,
-						'fragile' => ( 'YES' === $this->get_option( 'chuplivost' ) ),
+						'amount'                => (float) $order_total,
+						'fragile'               => ( 'YES' === $this->get_option( 'chuplivost' ) ),
+						'ignoreIfNotApplicable' => true,
 					];
 				}
 
 				// Return Voucher (old plugin only adds inside COD branch)
 				if ( 'YES' === $this->get_option( 'vaucher' ) ) {
 					$voucher = [
-						'serviceId' => 505,
-						'payer'     => $this->get_option( 'vaucherpayer', 'SENDER' ),
+						'serviceId'             => 505,
+						'payer'                 => $this->get_option( 'vaucherpayer', 'SENDER' ),
+						'ignoreIfNotApplicable' => true,
 					];
 
 					$validity = $this->get_option( 'vaucherpayerdays' );
@@ -1593,12 +1742,9 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				if ( ! empty( $special_req ) && '0' !== $special_req ) {
 					$service['additionalServices']['specialDeliveryId'] = $special_req;
 				}
-			} else {
-				// Non-COD: explicitly set COD amount to 0 (matches old plugin)
-				$service['additionalServices']['cod'] = [
-					'amount' => 0,
-				];
 			}
+			// Non-COD: don't include COD in additional services at all
+			// (the official Speedy API example omits COD entirely when not applicable)
 
 			// OBPD (Test Before Pay / Open Before Pay)
 			// Old plugin adds this regardless of COD status
@@ -1615,6 +1761,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 					'returnShipmentPayer'     => ( 'OPEN' === $obpd_option )
 						? ( $this->get_option( 'testplatec' ) ?: 'SENDER' )
 						: 'SENDER',
+					'ignoreIfNotApplicable'   => true,
 				];
 			}
 
@@ -1789,6 +1936,69 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 			unset( $debug_payload['userName'], $debug_payload['password'] );
 			error_log( 'Speedy Modern: API request payload – ' . wp_json_encode( $debug_payload ) );
 
+			$body = $this->do_speedy_calculate_request( $payload );
+
+			if ( is_wp_error( $body ) ) {
+				return $body;
+			}
+
+			// If the combined call succeeded with at least one calculation, return it.
+			$has_success = false;
+			if ( ! empty( $body['calculations'] ) ) {
+				foreach ( $body['calculations'] as $calc ) {
+					if ( isset( $calc['price']['total'] ) ) {
+						$has_success = true;
+						break;
+					}
+				}
+			}
+
+			if ( $has_success ) {
+				return $body;
+			}
+
+			// Combined call failed (top-level error or all calculations failed).
+			// If multiple serviceIds were sent, retry each one individually.
+			$service_ids = $payload['service']['serviceIds'] ?? [];
+			if ( count( $service_ids ) <= 1 ) {
+				return $body; // Single service – nothing more to try.
+			}
+
+			error_log( 'Speedy Modern: Combined serviceIds failed, retrying individually.' );
+
+			$merged_calculations = [];
+			foreach ( $service_ids as $sid ) {
+				$single_payload = $payload;
+				$single_payload['service']['serviceIds'] = [ $sid ];
+
+				$single_body = $this->do_speedy_calculate_request( $single_payload );
+
+				if ( is_wp_error( $single_body ) ) {
+					continue;
+				}
+
+				if ( ! empty( $single_body['calculations'] ) ) {
+					foreach ( $single_body['calculations'] as $calc ) {
+						$merged_calculations[] = $calc;
+					}
+				}
+			}
+
+			if ( ! empty( $merged_calculations ) ) {
+				return [ 'calculations' => $merged_calculations ];
+			}
+
+			// All individual calls failed too – return the original combined response.
+			return $body;
+		}
+
+		/**
+		 * Execute a single Speedy /v1/calculate HTTP request.
+		 *
+		 * @param array $payload Full request body including credentials.
+		 * @return array|WP_Error Decoded API response or WP_Error.
+		 */
+		private function do_speedy_calculate_request( array $payload ) {
 			$response = wp_remote_post( 'https://api.speedy.bg/v1/calculate', [
 				'headers' => [
 					'Content-Type' => 'application/json',
