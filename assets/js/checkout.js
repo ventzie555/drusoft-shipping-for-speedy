@@ -131,6 +131,11 @@
                 // City select already exists – no async work was triggered
                 restoringState = false;
             }
+
+            // Refresh the service selector if Speedy is active
+            if (isSpeedyActive) {
+                refreshServiceSelector();
+            }
         });
 
         // Listen for Country Change (WC re-sorts fields on this event)
@@ -340,7 +345,6 @@
 
         function activateSpeedy() {
             isSpeedyActive = true;
-            console.log('Speedy Modern Activated on ' + currentContext);
 
             reorderFieldsForSpeedy();
             sortRegions();
@@ -359,19 +363,37 @@
             $('body').on('change.speedy', '#' + currentContext + '_state', function() {
                 const state = $(this).val();
                 if (isSpeedyActive) {
+                    // State changed — remove stale delivery options from previous city
+                    $('#speedy-delivery-type-field').remove();
+                    $('#speedy-office-field').remove();
+                    $('#speedy-map-button-wrapper').remove();
+                    $('#speedy-service-field').remove();
+                    lastDeliveryType = 'address';
+                    lastOfficeId = '';
+
+                    // Clear the city value immediately so the next update_checkout
+                    // sees no city and returns the missing_address rate (no price).
+                    const $cityEl = $('#' + currentContext + '_city');
+                    if ($cityEl.is('select')) {
+                        $cityEl.val('').trigger('change.select2');
+                    } else {
+                        $cityEl.val('');
+                    }
+
                     if (state) {
                         $('#' + currentContext + '_city_field').show();
                         handleStateChange(state);
                     } else {
                         $('#' + currentContext + '_city_field').hide();
                     }
+                    // Recalculate so stale price is cleared
+                    $(document.body).trigger('update_checkout');
                 }
             });
         }
 
         function deactivateSpeedy() {
             isSpeedyActive = false;
-            console.log('Speedy Modern Deactivated on ' + currentContext);
 
             setWcAutocompleteProvider(false);
 
@@ -490,6 +512,7 @@
             $('#speedy-delivery-type-field').remove();
             $('#speedy-office-field').remove();
             $('#speedy-map-button-wrapper').remove();
+            $('#speedy-service-field').remove();
 
             $cityField.show();
         }
@@ -590,6 +613,7 @@
             $('#speedy-delivery-type-field').remove();
             $('#speedy-office-field').remove();
             $('#speedy-map-button-wrapper').remove();
+            $('#speedy-service-field').remove();
 
             const $address1Field = $('#' + currentContext + '_address_1_field');
             const $address2Field = $('#' + currentContext + '_address_2_field');
@@ -640,7 +664,8 @@
         function handleDeliveryTypeChange(type) {
             $('#speedy-office-field').remove();
             $('#speedy-map-button-wrapper').remove();
-            
+            $('#speedy-service-field').remove();
+
             sessionStorage.setItem('speedy_delivery_type', type);
             lastDeliveryType = type;
             
@@ -736,6 +761,85 @@
                 // Office/automat selected → recalculate shipping
                 $(document.body).trigger('update_checkout');
             });
+        }
+
+        /**
+         * Fetch available services from the session and show a selector
+         * if there are multiple options. When the user picks a different
+         * service we call a lightweight AJAX endpoint that updates the
+         * session and returns the new cost — no full update_checkout needed.
+         */
+        function refreshServiceSelector() {
+            $.ajax({
+                url: params.ajax_url,
+                method: 'POST',
+                data: { action: 'speedy_modern_get_services' },
+                success: function(response) {
+                    $('#speedy-service-field').remove();
+
+                    if (!response.success) return;
+
+                    const services = response.data.services;
+                    const selected = response.data.selected;
+
+                    // Only show a selector when there are 2+ services
+                    if (!services || services.length < 2) return;
+
+                    let radios = '';
+                    $.each(services, function(i, svc) {
+                        const checked = (svc.id === selected) ? ' checked="checked"' : '';
+                        const costFormatted = parseFloat(svc.cost).toFixed(2);
+                        radios += '<label class="speedy-service-option" style="display:block; margin-bottom:6px; font-weight:normal; cursor:pointer;">' +
+                            '<input type="radio" name="speedy_service_select" value="' + svc.id + '"' + checked +
+                            ' style="margin-right:6px; vertical-align:middle;">' +
+                            '<span>' + svc.name + ' — ' + costFormatted + ' ' + (params.currency_symbol || '') + '</span>' +
+                            '</label>';
+                    });
+
+                    const html = '<p class="form-row form-row-wide" id="speedy-service-field">' +
+                        '<label>' + params.i18n.select_service + '</label>' +
+                        '<span class="woocommerce-input-wrapper">' + radios + '</span></p>';
+
+                    // Insert after the last Speedy field
+                    const $anchor = $('#speedy-map-button-wrapper').length
+                        ? $('#speedy-map-button-wrapper')
+                        : ($('#speedy-office-field').length
+                            ? $('#speedy-office-field')
+                            : ($('#speedy-delivery-type-field').length
+                                ? $('#speedy-delivery-type-field')
+                                : $('#' + currentContext + '_city_field')));
+
+                    $anchor.after(html);
+
+                    $('input[name="speedy_service_select"]').on('change', function() {
+                        const serviceId = $(this).val();
+                        $.ajax({
+                            url: params.ajax_url,
+                            method: 'POST',
+                            data: {
+                                action: 'speedy_modern_select_service',
+                                service_id: serviceId
+                            },
+                            success: function(res) {
+                                if (res.success) {
+                                    // Update the shipping cost in the order review
+                                    // without triggering a full update_checkout.
+                                    updateSpeedyPriceInUI(res.data.cost);
+                                }
+                            }
+                        });
+                    });
+                }
+            });
+        }
+
+        /**
+         * Update the Speedy shipping price displayed in the order summary.
+         * The session is already updated with the selected service/price,
+         * so we just trigger update_checkout to recalculate totals.
+         */
+        function updateSpeedyPriceInUI(cost) {
+            $(document.body).trigger('update_checkout');
         }
 
         function openSpeedyMap() {

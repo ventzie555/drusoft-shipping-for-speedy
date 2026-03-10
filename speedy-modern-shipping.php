@@ -123,6 +123,60 @@ function register_speedy_modern_method( $methods ) {
 }
 
 /**
+ * Append the selected Speedy service ID to the shipping package so the
+ * package hash changes whenever the user picks a different service.
+ * This forces WooCommerce to re-call calculate_shipping() instead of
+ * returning a cached rate.
+ */
+add_filter( 'woocommerce_cart_shipping_packages', 'speedy_modern_vary_package_hash' );
+function speedy_modern_vary_package_hash( $packages ) {
+	// Extract delivery type and office ID from the current checkout POST data
+	// so the package hash changes whenever the user switches delivery type or
+	// picks a different office/automat — forcing WC to re-call calculate_shipping.
+	$post_data = [];
+	// phpcs:ignore WordPress.Security.NonceVerification
+	if ( ! empty( $_POST['post_data'] ) ) {
+		parse_str( wp_unslash( $_POST['post_data'] ), $post_data );
+	}
+	// phpcs:ignore WordPress.Security.NonceVerification
+	$merged = array_merge( $post_data, $_POST );
+
+	$delivery_type = sanitize_text_field( $merged['speedy_delivery_type'] ?? 'address' );
+	$office_id     = absint( $merged['speedy_office_id'] ?? 0 );
+	$selected      = WC()->session ? WC()->session->get( 'speedy_modern_selected_service', 0 ) : 0;
+
+	// Determine which address context is active
+	$ship_to_different = ! empty( $merged['ship_to_different_address'] );
+	$context           = $ship_to_different ? 'shipping' : 'billing';
+	$city_id           = absint( $merged[ $context . '_city' ] ?? 0 );
+
+	foreach ( $packages as &$package ) {
+		$package['speedy_selected_service'] = $selected;
+		$package['speedy_delivery_type']    = $delivery_type;
+		$package['speedy_office_id']        = $office_id;
+		$package['speedy_city_id']          = $city_id;
+	}
+
+	return $packages;
+}
+
+/**
+ * Hide the price in the order review when Speedy data is incomplete
+ * (e.g. user switched to office but hasn't selected one yet).
+ */
+add_filter( 'woocommerce_cart_shipping_method_full_label', 'speedy_modern_hide_incomplete_price', 10, 2 );
+function speedy_modern_hide_incomplete_price( $label, $method ) {
+	if ( 0 === strpos( $method->id, 'speedy_modern' ) ) {
+		$meta = $method->get_meta_data();
+		if ( ! empty( $meta['missing_address'] ) ) {
+			// Return just the method label without the price
+			return $method->get_label();
+		}
+	}
+	return $label;
+}
+
+/**
  * Enqueue scripts for the checkout page.
  *
  * @return void
@@ -135,7 +189,7 @@ function speedy_modern_enqueue_scripts(): void {
 			'speedy-modern-checkout',
 			SPEEDY_MODERN_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'select2' ),
-			'1.0.3',
+			'1.0.7',
 			true
 		);
 
@@ -143,23 +197,25 @@ function speedy_modern_enqueue_scripts(): void {
 			'speedy-modern-checkout',
 			SPEEDY_MODERN_URL . 'assets/css/checkout.css',
 			array(),
-			'1.0.0'
+			'1.0.1'
 		);
 
 		// Pass PHP data to JS (like AJAX URL or carrier IDs)
 		wp_localize_script( 'speedy-modern-checkout', 'speedy_params', array(
-			'ajax_url'  => admin_url( 'admin-ajax.php' ),
-			'method_id' => 'speedy_modern',
-			'i18n'      => array(
-				'to_address' => __( 'To Address', 'speedy-modern' ),
-				'to_office'  => __( 'To Office', 'speedy-modern' ),
-				'to_automat' => __( 'To Automat', 'speedy-modern' ),
-				'select_office' => __( 'Select Office', 'speedy-modern' ),
-				'select_automat' => __( 'Select Automat', 'speedy-modern' ),
-				'select_from_map' => __( 'Select from Map', 'speedy-modern' ),
-				'select_city' => __( 'Select a city...', 'speedy-modern' ),
+			'ajax_url'        => admin_url( 'admin-ajax.php' ),
+			'method_id'       => 'speedy_modern',
+			'currency_symbol' => get_woocommerce_currency_symbol(),
+			'i18n'            => array(
+				'to_address'       => __( 'To Address', 'speedy-modern' ),
+				'to_office'        => __( 'To Office', 'speedy-modern' ),
+				'to_automat'       => __( 'To Automat', 'speedy-modern' ),
+				'select_office'    => __( 'Select Office', 'speedy-modern' ),
+				'select_automat'   => __( 'Select Automat', 'speedy-modern' ),
+				'select_from_map'  => __( 'Select from Map', 'speedy-modern' ),
+				'select_city'      => __( 'Select a city...', 'speedy-modern' ),
 				'alert_select_city' => __( 'Please select a city first.', 'speedy-modern' ),
-				'no_results' => __( 'No results', 'speedy-modern' ),
+				'no_results'       => __( 'No results', 'speedy-modern' ),
+				'select_service'   => __( 'Select Service', 'speedy-modern' ),
 			)
 		));
 	}
@@ -790,6 +846,72 @@ function speedy_modern_validate_checkout(): void {
 			wc_add_notice( $error_msg, 'error' );
 		}
 	}
+}
+
+/**
+ * AJAX Handler: Select a Speedy service.
+ * Updates the session with the chosen service and returns the new cost.
+ */
+add_action( 'wp_ajax_speedy_modern_select_service', 'speedy_modern_select_service_ajax' );
+add_action( 'wp_ajax_nopriv_speedy_modern_select_service', 'speedy_modern_select_service_ajax' );
+
+function speedy_modern_select_service_ajax(): void {
+	$service_id = isset( $_POST['service_id'] ) ? absint( $_POST['service_id'] ) : 0;
+
+	if ( ! $service_id || ! WC()->session ) {
+		wp_send_json_error( 'Invalid service ID' );
+	}
+
+	$service_options = WC()->session->get( 'speedy_modern_service_options', [] );
+
+	if ( ! isset( $service_options[ $service_id ] ) ) {
+		wp_send_json_error( 'Service not available' );
+	}
+
+	$selected = $service_options[ $service_id ];
+
+	// Update session
+	WC()->session->set( 'speedy_modern_selected_service', $service_id );
+	WC()->session->set( 'speedy_modern_shipping_cost', $selected['cost'] );
+
+	// Update the shipping data payload for waybill
+	$payload = WC()->session->get( 'speedy_modern_shipping_data_' . $service_id );
+	if ( $payload ) {
+		WC()->session->set( 'speedy_modern_shipping_data', $payload );
+	}
+
+	// Invalidate WC shipping rate cache so the next update_checkout
+	// actually re-calls calculate_shipping with the new selection.
+	$packages = WC()->cart ? WC()->cart->get_shipping_packages() : [];
+	foreach ( $packages as $key => $package ) {
+		WC()->session->set( 'shipping_for_package_' . $key, false );
+	}
+
+	wp_send_json_success( [
+		'service_id' => $service_id,
+		'cost'       => $selected['cost'],
+		'name'       => $selected['name'],
+	] );
+}
+
+/**
+ * AJAX Handler: Get available Speedy service options from session.
+ */
+add_action( 'wp_ajax_speedy_modern_get_services', 'speedy_modern_get_services_ajax' );
+add_action( 'wp_ajax_nopriv_speedy_modern_get_services', 'speedy_modern_get_services_ajax' );
+
+function speedy_modern_get_services_ajax(): void {
+	if ( ! WC()->session ) {
+		wp_send_json_error( 'No session' );
+	}
+
+	$service_options = WC()->session->get( 'speedy_modern_service_options', [] );
+	$selected        = WC()->session->get( 'speedy_modern_selected_service', 0 );
+
+	wp_send_json_success( [
+		'services' => array_values( $service_options ),
+		'selected' => (int) $selected,
+	] );
 }
 
 /**

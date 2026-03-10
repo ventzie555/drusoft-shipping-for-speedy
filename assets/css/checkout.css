@@ -31,6 +31,25 @@
     padding: 6px 10px;
 }
 
+/* Service Selector (radio buttons) */
+#speedy-service-field {
+    max-width: 100%;
+}
+
+#speedy-service-field .speedy-service-option {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: normal;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+#speedy-service-field .speedy-service-option input[type="radio"] {
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
 /* Ensure radio buttons are aligned nicely */
 #speedy-delivery-type-wrapper label {
     font-weight: normal;

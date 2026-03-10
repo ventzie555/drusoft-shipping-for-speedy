@@ -149,9 +149,6 @@ if ( ! class_exists( 'Speedy_Modern_Waybill_Generator' ) ) {
 			}
 
 			// --- Make the API Call ---
-			$debug_payload = $payload;
-			unset( $debug_payload['userName'], $debug_payload['password'] );
-			error_log( 'Speedy Modern: Shipment payload – ' . wp_json_encode( $debug_payload ) );
 
 			$response = wp_remote_post( 'https://api.speedy.bg/v1/shipment/', [
 				'headers' => [
