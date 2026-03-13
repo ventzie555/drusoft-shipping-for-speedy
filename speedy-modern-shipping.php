@@ -358,7 +358,7 @@ function speedy_modern_enqueue_scripts(): void {
 			'speedy-modern-checkout',
 			SPEEDY_MODERN_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'select2', 'speedy-modern-common' ),
-			'1.0.20',
+			'1.0.22',
 			true
 		);
 
@@ -382,7 +382,7 @@ function speedy_modern_enqueue_scripts(): void {
 			'speedy-modern-cart',
 			SPEEDY_MODERN_URL . 'assets/js/cart.js',
 			array( 'jquery', 'select2', 'speedy-modern-common' ),
-			'1.0.12',
+			'1.0.15',
 			true
 		);
 

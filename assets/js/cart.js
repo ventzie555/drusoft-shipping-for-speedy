@@ -52,13 +52,30 @@
                 params.current_state = state;
                 // State genuinely changed by the user — reset city tracker
                 lastCityProcessed = null;
+                // Clear postcode — it belongs to the previous city
+                $postcodeField = $('#calc_shipping_postcode');
+                $postcodeField.val('');
                 // Persist state to WC session immediately
                 saveSelectionToSession();
                 handleCalculatorStateChange(state);
             }
         });
 
-        // Listen for shipping method radio changes on the cart page
+        // Listen for shipping method changes — use mousedown in CAPTURE phase
+        // so our DOM cleanup runs before any other plugin's event handlers.
+        document.addEventListener('mousedown', function(e) {
+            const radio = e.target.closest('input[name^="shipping_method"]');
+            if (!radio) return;
+
+            const isSpeedy = radio.value && radio.value.indexOf(params.method_id) === 0;
+            if (!isSpeedy && isSpeedyActive) {
+                isSpeedyActive = false;
+                $('#speedy-cart-selector').remove();
+                resetCalculatorUI();
+            }
+        }, true);
+
+        // Listen for shipping method radio changes — activation (switching TO Speedy)
         $(document).on('change', 'input[name^="shipping_method"]', function () {
             const $selected = $(this);
             const isSpeedy = $selected.val() && $selected.val().indexOf(params.method_id) === 0;
@@ -84,10 +101,6 @@
                 if (state) {
                     handleCalculatorStateChange(state);
                 }
-            } else if (!isSpeedy && isSpeedyActive) {
-                isSpeedyActive = false;
-                $('#speedy-cart-selector').remove();
-                resetCalculatorUI();
             }
         });
     });
@@ -391,6 +404,24 @@
             // Don't reset lastStateProcessed/lastCityProcessed here —
             // if the user switches back to Speedy the data is still valid.
         }
+
+        // Re-apply WC's native selectWoo on the state field so the searchable
+        // dropdown is restored after we destroyed our custom Select2.
+        var $state = $('select#calc_shipping_state');
+        if ($state.length && $.fn.selectWoo) {
+            if ($state.hasClass('select2-hidden-accessible')) {
+                $state.select2('destroy');
+            }
+            $state.selectWoo({ width: '100%' });
+        }
+
+        // Also re-apply selectWoo on the country field in case it was stripped.
+        var $country = $('select#calc_shipping_country');
+        if ($country.length && $.fn.selectWoo) {
+            if (!$country.hasClass('select2-hidden-accessible')) {
+                $country.selectWoo({ width: '100%' });
+            }
+        }
     }
 
     /* ─── Delivery-type selector ──────────────────────────── */
@@ -462,6 +493,15 @@
 
     function initStateSelect2() {
         SpeedyModern.initStateSelect2($('select#calc_shipping_state'), params.current_state);
+
+        // Re-apply selectWoo on the country field — our select2 destroy/re-init
+        // on the state field can strip selectWoo from sibling selects.
+        var $country = $('select#calc_shipping_country');
+        if ($country.length && $.fn.selectWoo) {
+            if (!$country.hasClass('select2-hidden-accessible')) {
+                $country.selectWoo({ width: '100%' });
+            }
+        }
     }
 
 })(jQuery, window.speedy_params);

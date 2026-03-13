@@ -94,10 +94,19 @@
         captureOriginals('billing');
         captureOriginals('shipping');
 
-        // Listen for shipping method changes (User click)
-        $('form.checkout').on('change', 'input[name^="shipping_method"]', function() {
-            checkShippingMethod();
-        });
+        // Listen for shipping method changes — use mousedown in CAPTURE phase
+        // so our DOM cleanup runs before any other plugin's event handlers.
+        document.addEventListener('mousedown', function(e) {
+            const radio = e.target.closest('input[name^="shipping_method"]');
+            if (!radio) return;
+
+            // The radio hasn't changed value yet on mousedown, but we can
+            // check whether the clicked radio is NOT Speedy.
+            const isSpeedy = radio.value && radio.value.indexOf(speedyMethodId) !== -1;
+            if (!isSpeedy && isSpeedyActive) {
+                deactivateSpeedy();
+            }
+        }, true);
 
         // Capture state BEFORE WC destroys the DOM
         $(document.body).on('update_checkout', function() {
@@ -494,12 +503,20 @@
                 cachedCityId = '';
                 cachedAvailability = null;
 
+                // Clear city field — destroy select2 if present, then reset
                 const $cityEl = $('#' + currentContext + '_city');
-                if ($cityEl.is('select')) {
+                if ($cityEl.is('select') && $cityEl.hasClass('select2-hidden-accessible')) {
                     $cityEl.val('').trigger('change.select2');
-                } else {
-                    $cityEl.val('');
+                    $cityEl.select2('destroy');
                 }
+                const $cityField = $('#' + currentContext + '_city_field');
+                if (originals[currentContext] && originals[currentContext].cityHtml) {
+                    $cityField.html(originals[currentContext].cityHtml);
+                    $('#' + currentContext + '_city').val('');
+                }
+
+                // Clear postcode — it belongs to the previous city
+                $('#' + currentContext + '_postcode').val('');
 
                 if (state) {
                     $('#' + currentContext + '_city_field').show();
@@ -511,18 +528,6 @@
             });
         }
 
-        function checkShippingMethod() {
-            const selectedMethod = $('input[name^="shipping_method"]:checked').val();
-            const speedySelected = selectedMethod && selectedMethod.indexOf(speedyMethodId) !== -1;
-
-            // Activation is handled exclusively by the updated_checkout handler.
-            // WC triggers update_checkout automatically when the radio changes,
-            // so updated_checkout will fire and call setupSpeedyUI().
-            // We only need to handle deactivation here (switching AWAY from Speedy).
-            if (!speedySelected && isSpeedyActive) {
-                deactivateSpeedy();
-            }
-        }
 
 
         function deactivateSpeedy() {
@@ -636,6 +641,16 @@
             $('#speedy-service-field').remove();
 
             $cityField.show();
+
+            // Re-apply WC's native selectWoo on the state field so the searchable
+            // dropdown is restored after we destroyed our custom Select2.
+            var $stateEl = $('#' + currentContext + '_state');
+            if ($stateEl.is('select') && $.fn.selectWoo) {
+                if ($stateEl.hasClass('select2-hidden-accessible')) {
+                    $stateEl.select2('destroy');
+                }
+                $stateEl.selectWoo({ width: '100%' });
+            }
         }
 
         function handleStateChange(stateCode, preSelectedCity) {

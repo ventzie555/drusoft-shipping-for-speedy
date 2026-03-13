@@ -1048,8 +1048,8 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 
 			// For office/automat delivery without a specific office chosen,
 			// pick the first available one just for the price calculation.
-			// This is NOT saved to session — the user still picks on checkout.
-			if ( in_array( $delivery_type, [ 'office', 'automat' ], true ) && empty( $office_id ) ) {
+			// Only on the cart page — on checkout the user selects an office.
+			if ( is_cart() && in_array( $delivery_type, [ 'office', 'automat' ], true ) && empty( $office_id ) ) {
 				$office_id = self::get_first_available_office( $city_id, $delivery_type );
 			}
 
@@ -1074,15 +1074,34 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				return;
 			}
 
+			// For office/automat delivery on checkout, we need the user to select an office.
+			if ( ! is_cart() && in_array( $delivery_type, [ 'office', 'automat' ], true ) && empty( $office_id ) ) {
+				if ( WC()->session ) {
+					WC()->session->set( 'speedy_modern_service_options', [] );
+					WC()->session->set( 'speedy_modern_shipping_cost', 0 );
+				}
+				$this->add_rate( [
+					'id'        => $this->get_rate_id(),
+					'label'     => $this->title,
+					'cost'      => 0,
+					'meta_data' => [ 'missing_address' => true ],
+				] );
+				return;
+			}
+
 			// --- 2. Determine weight ---
 			$order_weight = $this->resolve_weight( $package );
 
 			// --- 3. Determine order total & subtotal ---
-			$order_total = 0.0;
+			// Note: during calculate_shipping(), WC_Cart_Totals has NOT yet
+			// called calculate_totals(), so get_totals()['total'] is still 0
+			// on the initial cart load.  Use get_subtotal() (items only) which
+			// is always available because item subtotals are calculated first.
 			$subtotal    = 0.0;
+			$order_total = 0.0;
 			if ( WC()->cart ) {
-				$subtotal    = WC()->cart->get_subtotal();
-				$order_total = (float) WC()->cart->get_totals()['total'] - (float) WC()->cart->get_totals()['shipping_total'];
+				$subtotal    = (float) WC()->cart->get_subtotal();
+				$order_total = $subtotal;
 			}
 
 			$is_cod          = ( empty( $payment_method ) || 'cod' === $payment_method );
@@ -1378,6 +1397,10 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 			// phpcs:ignore WordPress.Security.NonceVerification
 			$merged = array_merge( $data, $_POST );
 
+			// post_data is present on checkout AJAX (update_order_review), absent on cart form submit.
+			// phpcs:ignore WordPress.Security.NonceVerification
+			$has_post_data = ! empty( $_POST['post_data'] );
+
 			// Determine which address context to use (billing or shipping)
 			$ship_to_different = ! empty( $merged['ship_to_different_address'] );
 			$context = $ship_to_different ? 'shipping' : 'billing';
@@ -1393,7 +1416,9 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 
 			// Office ID
 			$office_id = absint( $merged['speedy_office_id'] ?? 0 );
-			if ( $office_id === 0 && WC()->session ) {
+			// On the cart page, fall back to session (set by get_first_available_office).
+			// On checkout, do NOT fall back — the user must select an office explicitly.
+			if ( $office_id === 0 && WC()->session && ! $has_post_data ) {
 				$office_id = absint( WC()->session->get( 'speedy_modern_office_id', 0 ) );
 			}
 
@@ -1735,8 +1760,12 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				$money_transfer  = $this->get_option( 'moneytransfer', 'NO' );
 				$processing_type = ( 'YES' === $money_transfer ) ? 'POSTAL_MONEY_TRANSFER' : 'CASH';
 
-				// COD amount: base is full cart total
-				$cod_amount = (float) ( WC()->cart ? WC()->cart->get_totals()['total'] : $order_total );
+				// COD amount: use the items subtotal as the base.
+				// During calculate_shipping(), WC()->cart->get_totals()['total']
+				// is still 0 because WC_Cart_Totals hasn't called calculate_totals()
+				// yet (shipping is calculated first). The subtotal (items only) is
+				// always available and is the correct base for COD.
+				$cod_amount = $subtotal;
 
 				// For fixed/file pricing with COD, the old plugin sets cod.amount
 				// to subtotal + shipping cost so the courier collects the right total.

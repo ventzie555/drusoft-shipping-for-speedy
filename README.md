@@ -14,6 +14,12 @@
 
 **Speedy Modern Shipping** is a high-performance, conflict-free WooCommerce integration for Speedy delivery services in Bulgaria. Designed for speed, reliability, and ease of use, it provides a seamless shipping experience for both merchants and customers.
 
+> **❗ IMPORTANT COMPATIBILITY NOTE**
+>
+> This plugin is currently **NOT COMPATIBLE** with the WooCommerce **Block Cart** and **Block Checkout** pages. To use this plugin, please ensure your store is using the classic **Shortcode-based** Cart and Checkout pages. 
+>
+> If your site is using the Block Checkout, you must replace the [Checkout Block](https://woocommerce.com/document/cart-checkout-blocks-status/) with the `[woocommerce_checkout]` shortcode.
+
 ---
 
 ## 🚀 Key Features
@@ -78,13 +84,34 @@ The plugin settings are divided into several key sections:
 
 #### 💰 Pricing & Payment
 - **Pricing Methods:**
-    - **Speedy Calculator:** Real-time API calculation.
-    - **Fixed Price:** Uniform price for all orders.
-    - **Free Shipping:** Fully subsidized by the merchant.
-    - **Custom Prices (CSV):** Upload a CSV for complex pricing rules.
+    - **Speedy Calculator:** Real-time API calculation based on weight, destination, and selected service.
+    - **Fixed Price:** Uniform price for all orders, configurable per delivery type (Address, Office, Automat).
+    - **Free Shipping:** Fully subsidized by the merchant. Can be always free or triggered by a minimum order amount.
+    - **Custom Prices (CSV):** Upload a CSV for complex pricing rules based on weight and order total.
     - **Calculator + Surcharge:** API price plus a fixed additional fee.
-- **Free/Fixed Thresholds:** Set specific amounts for Free or Fixed shipping based on the cart total for different delivery types (Address, Office, Automat).
-- **Payment Options:** Configure Cash on Delivery (COD) vs. Postal Money Transfer and handle fiscal receipts.
+
+### 📈 Detailed Pricing Logic
+
+#### 📌 Fixed Price
+You can set different fixed prices for each delivery method:
+*   **To Address:** A flat rate for all home/work deliveries.
+*   **To Office:** A flat rate for all Speedy office pickups.
+*   **To Automat:** A flat rate for all Speedy APS (automat) pickups.
+
+#### 🎁 Free Shipping
+Free shipping can be configured in two ways:
+1.  **Always Free:** Set the pricing method to "Free Shipping".
+2.  **Threshold-based:** Enable "Free Shipping Threshold" and set minimum order amounts for Address, Office, and Automat deliveries independently.
+
+#### 📄 Custom Prices (CSV)
+For advanced scenarios, you can upload a CSV file (`fileceni`). The plugin matches the best price based on the following columns:
+*   **Format:** `service_id, delivery_type, max_weight, max_order_total, price`
+*   **Delivery Type Mapping:** `0` for Address, `1` for Office, `2` for Automat.
+*   **Matching:** The plugin finds all rows matching the delivery type where the order's weight and subtotal are less than or equal to the CSV values, then selects the one with the lowest `max_order_total`.
+
+#### 💳 Payment Options
+- **COD & Money Transfer:** Configure Cash on Delivery (COD) vs. Postal Money Transfer.
+- **Fiscal Receipts:** Manage handling of fiscal receipts for Speedy deliveries.
 
 #### ⚙️ Workflow & Options
 - **Automatic Waybill:** Option to automatically generate a waybill when an order reaches "Completed" status.
@@ -121,6 +148,12 @@ This plugin is developed and maintained by **DRUSOFT LTD**.
 [![PHP Version](https://img.shields.io/badge/PHP-7.4+-777bb4.svg)](https://www.php.net/)
 
 **Speedy Modern Shipping** е високопроизводителна и безконфликтна интеграция на Speedy услуги за доставка за WooCommerce магазини в България. Проектиран за бързина, надеждност и лесна употреба, той осигурява безпроблемно изживяване при доставка както за търговците, така и за клиентите.
+
+> **❗ ВАЖНА ЗАБЕЛЕЖКА ЗА СЪВМЕСТИМОСТ**
+>
+> Този плъгин в момента **НЕ Е СЪВМЕСТИМ** със страниците **Block Cart** и **Block Checkout** на WooCommerce. За да използвате този плъгин, моля, уверете се, че вашият магазин използва класическите страници за Количка и Плащане, базирани на **Shortcode**.
+>
+> Ако вашият сайт използва Block Checkout, трябва да замените [Checkout Block](https://woocommerce.com/document/cart-checkout-blocks-status/) с краткия код `[woocommerce_checkout]`.
 
 ---
 
@@ -186,13 +219,34 @@ This plugin is developed and maintained by **DRUSOFT LTD**.
 
 #### 💰 Ценообразуване и плащане
 - **Методи за ценообразуване:**
-    - **Калкулатор на Спиди:** Изчисляване чрез API в реално време.
-    - **Фиксирана цена:** Еднаква цена за всички поръчки.
-    - **Безплатна доставка:** Напълно субсидирана от търговеца.
-    - **Персонализирани цени (CSV):** Качете CSV файл за сложни ценови правила.
+    - **Калкулатор на Спиди:** Изчисляване чрез API в реално време въз основа на тегло, дестинация и избрана услуга.
+    - **Фиксирана цена:** Еднаква цена за всички поръчки, конфигурируема според типа доставка (Адрес, Офис, Автомат).
+    - **Безплатна доставка:** Напълно субсидирана от търговеца. Може да бъде винаги безплатна или приложена при минимална сума на поръчката.
+    - **Персонализирани цени (CSV):** Качете CSV файл за сложни ценови правила въз основа на тегло и обща сума.
     - **Калкулатор + Надбавка:** API цена плюс фиксирана допълнителна такса.
-- **Прагове за безплатна/фиксирана доставка:** Задайте конкретни суми за безплатна или фиксирана доставка въз основа на общата сума на количката за различните видове доставка (Адрес, Офис, Автомат).
-- **Опции за плащане:** Конфигурирайте Наложен платеж (COD) спрямо Пощенски паричен превод и управление на фискални бонове.
+
+### 📈 Детайлна логика на ценообразуване
+
+#### 📌 Фиксирана цена
+Можете да зададете различни фиксирани цени за всеки метод на доставка:
+*   **До Адрес:** Фиксирана такса за всички доставки до дома или офиса.
+*   **До Офис:** Фиксирана такса за всички пратки до офис на Спиди.
+*   **До Автомат:** Фиксирана такса за всички пратки до автомат (APS) на Спиди.
+
+#### 🎁 Безплатна доставка
+Безплатната доставка може да бъде конфигурирана по два начина:
+1.  **Винаги безплатна:** Задайте метода на ценообразуване на „Безплатна доставка“.
+2.  **Базирана на праг:** Активирайте „Праг за безплатна доставка“ и задайте минимални суми на поръчката за Адрес, Офис и Автомат поотделно.
+
+#### 📄 Персонализирани цени (CSV)
+За напреднали сценарии можете да качете CSV файл (`fileceni`). Плъгинът намира най-добрата цена въз основа на следните колони:
+*   **Формат:** `service_id, delivery_type, max_weight, max_order_total, price`
+*   **Mapping на типа доставка:** `0` за Адрес, `1` за Офис, `2` за Автомат.
+*   **Намиране на цена:** Плъгинът намира всички редове, съответстващи на типа доставка, където теглото и междинната сума на поръчката са по-малки или равни на стойностите в CSV, след което избира този с най-ниската „max_order_total“.
+
+#### 💳 Опции за плащане
+- **COD и Пощенски превод:** Конфигурирайте Наложен платеж (COD) спрямо Пощенски паричен превод.
+- **Фискални бонове:** Управление на обработката на фискални бонове при доставки със Спиди.
 
 #### ⚙️ Работен процес и опции
 - **Автоматична товарителница:** Опция за автоматично генериране на товарителница, когато поръчката достигне статус „Завършена“ (Completed).
