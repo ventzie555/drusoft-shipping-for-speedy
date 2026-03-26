@@ -153,6 +153,7 @@
 
 				var formData = new FormData();
 				formData.append('action', 'speedy_modern_upload_file');
+				formData.append('nonce', speedy_modern_admin.nonce);
 				formData.append('file', file);
 
 				$.ajax({
@@ -318,6 +319,7 @@
 					data: function (params) {
 						return {
 							action: 'speedy_modern_search_cities',
+							nonce: speedy_modern_admin.nonce,
 							term: params.term
 						};
 					},
@@ -351,6 +353,7 @@
 					data: function (params) {
 						return {
 							action: 'speedy_modern_search_offices',
+							nonce: speedy_modern_admin.nonce,
 							term: params.term
 						};
 					},

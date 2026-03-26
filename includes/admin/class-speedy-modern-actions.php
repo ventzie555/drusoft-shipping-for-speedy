@@ -23,12 +23,12 @@ class Speedy_Modern_Actions {
 		check_ajax_referer( 'speedy_modern_actions', 'nonce' );
 
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
-			wp_send_json_error( __( 'Permission denied.', 'speedy-modern' ) );
+			wp_send_json_error( __( 'Permission denied.', 'speedy-modern-shipping' ) );
 		}
 
 		$order_id = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
 		if ( ! $order_id ) {
-			wp_send_json_error( __( 'Invalid order ID.', 'speedy-modern' ) );
+			wp_send_json_error( __( 'Invalid order ID.', 'speedy-modern-shipping' ) );
 		}
 
 		$result = Speedy_Modern_Waybill_Generator::instance()->generate_waybill( $order_id );
@@ -37,7 +37,7 @@ class Speedy_Modern_Actions {
 			wp_send_json_error( $result->get_error_message() );
 		}
 
-		wp_send_json_success( __( 'Waybill generated successfully.', 'speedy-modern' ) );
+		wp_send_json_success( __( 'Waybill generated successfully.', 'speedy-modern-shipping' ) );
 	}
 
 	/**
@@ -47,32 +47,32 @@ class Speedy_Modern_Actions {
 		check_ajax_referer( 'speedy_modern_actions', 'nonce' );
 
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
-			wp_send_json_error( __( 'Permission denied.', 'speedy-modern' ) );
+			wp_send_json_error( __( 'Permission denied.', 'speedy-modern-shipping' ) );
 		}
 
 		$order_id = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
 		if ( ! $order_id ) {
-			wp_send_json_error( __( 'Invalid order ID.', 'speedy-modern' ) );
+			wp_send_json_error( __( 'Invalid order ID.', 'speedy-modern-shipping' ) );
 		}
 
 		$order = wc_get_order( $order_id );
 		$waybill_id = $order->get_meta( '_speedy_waybill_id' );
 
 		if ( ! $waybill_id ) {
-			wp_send_json_error( __( 'No waybill found for this order.', 'speedy-modern' ) );
+			wp_send_json_error( __( 'No waybill found for this order.', 'speedy-modern-shipping' ) );
 		}
 
 		// Get credentials
 		$credentials = self::get_credentials_for_order( $order );
 		if ( ! $credentials ) {
-			wp_send_json_error( __( 'API credentials not found.', 'speedy-modern' ) );
+			wp_send_json_error( __( 'API credentials not found.', 'speedy-modern-shipping' ) );
 		}
 
 		$payload = [
 			'userName'   => $credentials['username'],
 			'password'   => $credentials['password'],
 			'shipmentId' => $waybill_id,
-			'comment'    => __( 'Cancelled by admin', 'speedy-modern' ),
+			'comment'    => __( 'Cancelled by admin', 'speedy-modern-shipping' ),
 		];
 
 		$response = wp_remote_post( 'https://api.speedy.bg/v1/shipment/cancel', [
@@ -88,20 +88,21 @@ class Speedy_Modern_Actions {
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 		$http_code = wp_remote_retrieve_response_code( $response );
 
-		error_log( 'Speedy Modern: Cancel API response (HTTP ' . $http_code . ') – ' . wp_remote_retrieve_body( $response ) );
+		error_log( 'Speedy Modern: Cancel API response (HTTP ' . $http_code . ') – ' . wp_remote_retrieve_body( $response ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 
 		if ( $http_code >= 400 || isset( $body['error'] ) ) {
-			wp_send_json_error( $body['error']['message'] ?? __( 'API Error', 'speedy-modern' ) );
+			wp_send_json_error( $body['error']['message'] ?? __( 'API Error', 'speedy-modern-shipping' ) );
 		}
 
 		// Success: Clear meta
 		$order->delete_meta_data( '_speedy_waybill_id' );
 		$order->delete_meta_data( '_speedy_waybill_response' );
 		$order->delete_meta_data( '_speedy_courier_requested' );
-		$order->add_order_note( sprintf( __( 'Speedy shipment %s cancelled.', 'speedy-modern' ), $waybill_id ) );
+		/* translators: %s: Speedy waybill ID */
+		$order->add_order_note( sprintf( __( 'Speedy shipment %s cancelled.', 'speedy-modern-shipping' ), $waybill_id ) );
 		$order->save();
 
-		wp_send_json_success( __( 'Shipment cancelled successfully.', 'speedy-modern' ) );
+		wp_send_json_success( __( 'Shipment cancelled successfully.', 'speedy-modern-shipping' ) );
 	}
 
 	/**
@@ -111,24 +112,24 @@ class Speedy_Modern_Actions {
 		check_ajax_referer( 'speedy_modern_actions', 'nonce' );
 
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
-			wp_send_json_error( __( 'Permission denied.', 'speedy-modern' ) );
+			wp_send_json_error( __( 'Permission denied.', 'speedy-modern-shipping' ) );
 		}
 
 		$order_id = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
 		if ( ! $order_id ) {
-			wp_send_json_error( __( 'Invalid order ID.', 'speedy-modern' ) );
+			wp_send_json_error( __( 'Invalid order ID.', 'speedy-modern-shipping' ) );
 		}
 
 		$order = wc_get_order( $order_id );
 		$waybill_id = $order->get_meta( '_speedy_waybill_id' );
 
 		if ( ! $waybill_id ) {
-			wp_send_json_error( __( 'No waybill found for this order.', 'speedy-modern' ) );
+			wp_send_json_error( __( 'No waybill found for this order.', 'speedy-modern-shipping' ) );
 		}
 
 		$credentials = self::get_credentials_for_order( $order );
 		if ( ! $credentials ) {
-			wp_send_json_error( __( 'API credentials not found.', 'speedy-modern' ) );
+			wp_send_json_error( __( 'API credentials not found.', 'speedy-modern-shipping' ) );
 		}
 
 		// Calculate pickup time (Next day if after 16:00, otherwise today)
@@ -165,7 +166,7 @@ class Speedy_Modern_Actions {
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 		$http_code = wp_remote_retrieve_response_code( $response );
 
-		error_log( 'Speedy Modern: Pickup API response (HTTP ' . $http_code . ') – ' . wp_remote_retrieve_body( $response ) );
+		error_log( 'Speedy Modern: Pickup API response (HTTP ' . $http_code . ') – ' . wp_remote_retrieve_body( $response ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 
 		// The API returns error.context = 'consignments.consignment_is_ordered'
 		// when the shipment was already requested for pickup (e.g. auto-requested
@@ -174,13 +175,13 @@ class Speedy_Modern_Actions {
 		$is_already_ordered = ( 'consignments.consignment_is_ordered' === $error_context );
 
 		if ( $http_code >= 400 || ( isset( $body['error'] ) && ! $is_already_ordered ) ) {
-			wp_send_json_error( $body['error']['message'] ?? __( 'API Error', 'speedy-modern' ) );
+			wp_send_json_error( $body['error']['message'] ?? __( 'API Error', 'speedy-modern-shipping' ) );
 		}
 
 		$order->update_meta_data( '_speedy_courier_requested', 'yes' );
-		$order->add_order_note( __( 'Courier requested successfully.', 'speedy-modern' ) );
+		$order->add_order_note( __( 'Courier requested successfully.', 'speedy-modern-shipping' ) );
 		$order->save();
-		wp_send_json_success( __( 'Courier requested successfully.', 'speedy-modern' ) );
+		wp_send_json_success( __( 'Courier requested successfully.', 'speedy-modern-shipping' ) );
 	}
 
 	/**
@@ -189,24 +190,26 @@ class Speedy_Modern_Actions {
 	 */
 	public static function print_waybill(): void {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
-			wp_die( __( 'Permission denied.', 'speedy-modern' ) );
+			wp_die( esc_html__( 'Permission denied.', 'speedy-modern-shipping' ) );
 		}
+
+		check_admin_referer( 'speedy_print_waybill' );
 
 		$order_id = isset( $_GET['order_id'] ) ? absint( $_GET['order_id'] ) : 0;
 		if ( ! $order_id ) {
-			wp_die( __( 'Invalid order ID.', 'speedy-modern' ) );
+			wp_die( esc_html__( 'Invalid order ID.', 'speedy-modern-shipping' ) );
 		}
 
 		$order = wc_get_order( $order_id );
 		$waybill_id = $order->get_meta( '_speedy_waybill_id' );
 
 		if ( ! $waybill_id ) {
-			wp_die( __( 'No waybill found.', 'speedy-modern' ) );
+			wp_die( esc_html__( 'No waybill found.', 'speedy-modern-shipping' ) );
 		}
 
 		$credentials = self::get_credentials_for_order( $order );
 		if ( ! $credentials ) {
-			wp_die( __( 'API credentials not found.', 'speedy-modern' ) );
+			wp_die( esc_html__( 'API credentials not found.', 'speedy-modern-shipping' ) );
 		}
 
 		// Determine paper size from settings: label printer = A6, regular = A4
@@ -237,7 +240,7 @@ class Speedy_Modern_Actions {
 		] );
 
 		if ( is_wp_error( $response ) ) {
-			wp_die( $response->get_error_message() );
+			wp_die( esc_html( $response->get_error_message() ) );
 		}
 
 		$body = wp_remote_retrieve_body( $response );
@@ -254,21 +257,22 @@ class Speedy_Modern_Actions {
 
 			// Top-level error
 			if ( ! empty( $json['error']['message'] ) ) {
-				wp_die( esc_html( $json['error']['message'] ), __( 'Speedy Print Error', 'speedy-modern' ) );
+				wp_die( esc_html( $json['error']['message'] ), esc_html__( 'Speedy Print Error', 'speedy-modern-shipping' ) );
 			}
 
 			// Parcel-level error (e.g. shipment cancelled/expired)
 			if ( ! empty( $json['parcels'][0]['error']['message'] ) ) {
-				wp_die( esc_html( $json['parcels'][0]['error']['message'] ), __( 'Speedy Print Error', 'speedy-modern' ) );
+				wp_die( esc_html( $json['parcels'][0]['error']['message'] ), esc_html__( 'Speedy Print Error', 'speedy-modern-shipping' ) );
 			}
 
-			wp_die( __( 'Unknown error from Speedy print API.', 'speedy-modern' ) );
+			wp_die( esc_html__( 'Unknown error from Speedy print API.', 'speedy-modern-shipping' ) );
 		}
 
 		// Output PDF
 		header( 'Content-Type: application/pdf' );
-		header( 'Content-Disposition: inline; filename="speedy-waybill-' . $waybill_id . '.pdf"' );
+		header( 'Content-Disposition: inline; filename="speedy-waybill-' . sanitize_file_name( $waybill_id ) . '.pdf"' );
 		header( 'Content-Length: ' . strlen( $body ) );
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Binary PDF data cannot be escaped.
 		echo $body;
 		exit;
 	}

@@ -1,10 +1,10 @@
 # Speedy Modern Shipping for WooCommerce
 
-> **⚠️ LICENSE NOTICE / ПРАВНА БЕЛЕЖКА**
+> **⚖️ LICENSE / ЛИЦЕНЗ**
 >
-> **English:** This repository is PUBLIC for visibility and version control history purposes ONLY. This is NOT Open Source software. Use is permitted for personal or internal business purposes only. REDISTRIBUTION, MIRRORING, or RE-HOSTING of this code on other servers/repositories is STRICTLY PROHIBITED under the terms of the DRUSOFT LTD License.
+> **English:** This plugin is released under the **GNU General Public License v2 or later**. You are free to use, modify, and redistribute this software in accordance with the terms of the GPL.
 >
-> **Български:** Това хранилище е ПУБЛИЧНО единствено с цел видимост и история на версиите. Това НЕ Е софтуер с отворен код. Ползването е разрешено само за лични или вътрешни бизнес нужди. ПРЕРАЗПРОСТРАНЕНИЕТО, ХОСТВАНЕТО или ПУБЛИКУВАНЕТО на този код на други сървъри/хранилища е СТРОГО ЗАБРАНЕНО съгласно условията на лиценза на ДРУСОФТ ЕООД.
+> **Български:** Този плъгин се разпространява под **GNU General Public License v2 или по-късна версия**. Можете свободно да използвате, променяте и разпространявате този софтуер съгласно условията на GPL.
 >
 > ---
 
@@ -263,14 +263,15 @@ This plugin is developed and maintained by **DRUSOFT LTD**.
 
 ### Фонови задачи
 Плъгинът планира действие `speedy_modern_sync_locations_event`. Можете да го следите в **WooCommerce > Статус > Планирани действия**.
-
 ---
 
 ## 📄 Лиценз
 
-Този плъгин е разработен и се поддържа от **ДРУСОФТ ЕООД**.
+Този плъгин се разпространява под **GNU General Public License v2 или по-късна версия**.
+Разработен и се поддържа от **[ДРУСОФТ ЕООД](https://drusoft.dev/)**.
 
 ---
 
-*За поддръжка или заявки за персонализирани функции, моля, свържете се с ДРУСОФТ ЕООД.*
+*За поддръжка или заявки за персонализирани функции, моля, свържете се с [ДРУСОФТ ЕООД](https://drusoft.dev/).*
 
+---

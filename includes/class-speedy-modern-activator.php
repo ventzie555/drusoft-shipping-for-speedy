@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Fired during plugin activation.
  */
@@ -51,10 +55,9 @@ class Speedy_Modern_Activator {
 	public static function deactivate(): void {
 		global $wpdb;
 
-		$table_cities = $wpdb->prefix . 'speedy_cities';
-		$table_offices = $wpdb->prefix . 'speedy_offices';
-
-		$wpdb->query( "DROP TABLE IF EXISTS $table_cities" );
-		$wpdb->query( "DROP TABLE IF EXISTS $table_offices" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}speedy_cities" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}speedy_offices" );
 	}
 }

@@ -267,6 +267,7 @@
                     type: 'POST',
                     data: {
                         action: 'speedy_get_region_by_city',
+                        nonce: params.nonce,
                         city_id: targetCityId
                     },
                     success: function(response) {
@@ -436,7 +437,7 @@
             $.ajax({
                 url: params.ajax_url,
                 type: 'POST',
-                data: { action: 'speedy_get_cities', region: stateCode },
+                data: { action: 'speedy_get_cities', nonce: params.nonce, region: stateCode },
                 success: function(response) {
                     if (response.success) {
                         cachedState = stateCode;
@@ -466,7 +467,7 @@
             $.ajax({
                 url: params.ajax_url,
                 type: 'POST',
-                data: { action: 'speedy_check_availability', city_id: cityId },
+                data: { action: 'speedy_check_availability', nonce: params.nonce, city_id: cityId },
                 success: function(response) {
                     if (response.success) {
                         cachedCityId = cityId;
@@ -906,7 +907,7 @@
             $.ajax({
                 url: params.ajax_url,
                 method: 'POST',
-                data: { action: 'speedy_modern_get_services' },
+                data: { action: 'speedy_modern_get_services', nonce: params.nonce },
                 success: function(response) {
                     $('#speedy-service-field').remove();
 
@@ -951,6 +952,7 @@
                             method: 'POST',
                             data: {
                                 action: 'speedy_modern_select_service',
+                                nonce: params.nonce,
                                 service_id: serviceId
                             },
                             success: function(res) {
@@ -1128,6 +1130,7 @@
                         method: 'POST',
                         data: {
                             action: 'speedy_modern_search_streets',
+                            nonce: params.nonce,
                             siteId: siteId,
                             name: query
                         },

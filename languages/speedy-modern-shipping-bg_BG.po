@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: Speedy Modern Shipping 1.0.0\n"
+"Project-Id-Version: Modern Shipping for Speedy 1.0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2023-10-27 12:00+0000\n"
 "PO-Revision-Date: 2023-10-27 12:00+0000\n"

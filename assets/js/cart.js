@@ -233,6 +233,7 @@
             type: 'POST',
             data: {
                 action: 'speedy_modern_save_cart_selection',
+                nonce: params.nonce,
                 state: state,
                 city_id: cityId,
                 delivery_type: deliveryType,
@@ -263,6 +264,7 @@
             type: 'POST',
             data: {
                 action: 'speedy_get_cities',
+                nonce: params.nonce,
                 region: stateCode
             },
             success: function (response) {

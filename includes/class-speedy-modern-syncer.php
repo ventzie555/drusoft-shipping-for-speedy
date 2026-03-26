@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Handles background synchronization of Speedy locations (Cities and Offices).
  */
@@ -11,7 +15,7 @@ class Speedy_Modern_Syncer {
 	public static function sync() {
 		// Increase time limit for sync
 		if ( function_exists( 'set_time_limit' ) ) {
-			set_time_limit( 300 );
+			set_time_limit( 300 ); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- bulk sync of thousands of rows needs extended time.
 		}
 
 		// Get Settings (to access API credentials)
@@ -47,7 +51,7 @@ class Speedy_Modern_Syncer {
 		if ( empty( $username ) || empty( $password ) ) {
 			// Log error: Credentials missing
 			if ( class_exists( 'WC_Logger' ) ) {
-				wc_get_logger()->error( __( 'Speedy Sync Failed: Missing credentials.', 'speedy-modern-shipping' ), array( 'source' => 'speedy-modern' ) );
+				wc_get_logger()->error( __( 'Speedy Sync Failed: Missing credentials.', 'speedy-modern-shipping' ), array( 'source' => 'speedy-modern-shipping' ) );
 			}
 			return;
 		}
@@ -67,30 +71,24 @@ class Speedy_Modern_Syncer {
 		$username = $settings['speedy_username'];
 		$password = $settings['speedy_password'];
 
-		$body = json_encode( [
-			'userName' => $username,
-			'password' => $password,
-		] );
-
 		// Use CSV endpoint for full list
-		$ch = curl_init( 'https://api.speedy.bg/v1/location/site/csv/100' );
-		curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
-		curl_setopt( $ch, CURLOPT_POST, true );
-		curl_setopt( $ch, CURLOPT_POSTFIELDS, $body );
-		curl_setopt( $ch, CURLOPT_HTTPHEADER, [
-			'Content-Type: application/json'
+		$response = wp_remote_post( 'https://api.speedy.bg/v1/location/site/csv/100', [
+			'headers' => [ 'Content-Type' => 'application/json' ],
+			'body'    => wp_json_encode( [
+				'userName' => $username,
+				'password' => $password,
+			] ),
+			'timeout' => 120,
 		] );
 
-		$response = curl_exec( $ch );
-		$error    = curl_error( $ch );
-		curl_close( $ch );
-
-		if ( $error ) {
+		if ( is_wp_error( $response ) ) {
 			if ( class_exists( 'WC_Logger' ) ) {
-				wc_get_logger()->error( __( 'Speedy Cities Sync Error: ', 'speedy-modern-shipping' ) . $error, array( 'source' => 'speedy-modern' ) );
+				wc_get_logger()->error( __( 'Speedy Cities Sync Error: ', 'speedy-modern-shipping' ) . $response->get_error_message(), array( 'source' => 'speedy-modern-shipping' ) );
 			}
 			return;
 		}
+
+		$response = wp_remote_retrieve_body( $response );
 
 		// Parse CSV
 		$lines = explode( "\n", $response );
@@ -103,10 +101,9 @@ class Speedy_Modern_Syncer {
 
 		$table_name = $wpdb->prefix . 'speedy_cities';
 
-		// Truncate table
-		$wpdb->query( "TRUNCATE TABLE $table_name" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "TRUNCATE TABLE {$wpdb->prefix}speedy_cities" );
 
-		//$arr_excluded_cities = [21539, 21542]; // Exclude problematic cities
 		$count = 0;
 
 		foreach ( $lines as $line ) {
@@ -121,10 +118,7 @@ class Speedy_Modern_Syncer {
 
 			$city = array_combine( $header, $row );
 
-			/*if ( in_array( $city['id'], $arr_excluded_cities ) ) {
-				continue;
-			}*/
-
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 			$wpdb->insert(
 				$table_name,
 				array(
@@ -139,7 +133,7 @@ class Speedy_Modern_Syncer {
 		}
 
 		if ( class_exists( 'WC_Logger' ) ) {
-			wc_get_logger()->info( __( 'Speedy Cities Sync Completed. Count: ', 'speedy-modern-shipping' ) . $count, array( 'source' => 'speedy-modern' ) );
+			wc_get_logger()->info( __( 'Speedy Cities Sync Completed. Count: ', 'speedy-modern-shipping' ) . $count, array( 'source' => 'speedy-modern-shipping' ) );
 		}
 	}
 
@@ -149,41 +143,36 @@ class Speedy_Modern_Syncer {
 		$username = $settings['speedy_username'];
 		$password = $settings['speedy_password'];
 
-		$body = json_encode( [
-			'userName' => $username,
-			'password' => $password,
-			'countryId' => 100 // Bulgaria
+		$response = wp_remote_post( 'https://api.speedy.bg/v1/location/office', [
+			'headers' => [
+				'Content-Type'  => 'application/json',
+				'Accept'        => 'application/json',
+			],
+			'body'    => wp_json_encode( [
+				'userName'  => $username,
+				'password'  => $password,
+				'countryId' => 100, // Bulgaria
+			] ),
+			'timeout' => 120,
 		] );
 
-		$ch = curl_init( 'https://api.speedy.bg/v1/location/office' );
-		curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
-		curl_setopt( $ch, CURLOPT_POST, true );
-		curl_setopt( $ch, CURLOPT_POSTFIELDS, $body );
-		curl_setopt( $ch, CURLOPT_HTTPHEADER, [
-			'Content-Type: application/json',
-			'Accept: application/json'
-		] );
-
-		$response = curl_exec( $ch );
-		$error    = curl_error( $ch );
-		curl_close( $ch );
-
-		if ( $error ) {
+		if ( is_wp_error( $response ) ) {
 			if ( class_exists( 'WC_Logger' ) ) {
-				wc_get_logger()->error( __( 'Speedy Offices Sync Error: ', 'speedy-modern-shipping' ) . $error, array( 'source' => 'speedy-modern' ) );
+				wc_get_logger()->error( __( 'Speedy Offices Sync Error: ', 'speedy-modern-shipping' ) . $response->get_error_message(), array( 'source' => 'speedy-modern-shipping' ) );
 			}
 			return;
 		}
 
-		$data = json_decode( $response, true );
+		$data = json_decode( wp_remote_retrieve_body( $response ), true );
 
 		if ( isset( $data['offices'] ) && is_array( $data['offices'] ) ) {
 			$table_name = $wpdb->prefix . 'speedy_offices';
 			
-			// Truncate table
-			$wpdb->query( "TRUNCATE TABLE $table_name" );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->query( "TRUNCATE TABLE {$wpdb->prefix}speedy_offices" );
 
 			foreach ( $data['offices'] as $office ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 				$wpdb->insert(
 					$table_name,
 					array(
@@ -205,7 +194,7 @@ class Speedy_Modern_Syncer {
 			}
 
 			if ( class_exists( 'WC_Logger' ) ) {
-				wc_get_logger()->info( __( 'Speedy Offices Sync Completed. Count: ', 'speedy-modern-shipping' ) . count($data['offices']), array( 'source' => 'speedy-modern' ) );
+				wc_get_logger()->info( __( 'Speedy Offices Sync Completed. Count: ', 'speedy-modern-shipping' ) . count($data['offices']), array( 'source' => 'speedy-modern-shipping' ) );
 			}
 		}
 	}
