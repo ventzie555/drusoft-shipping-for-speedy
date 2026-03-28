@@ -282,11 +282,18 @@ function speedy_modern_vary_package_hash( $packages ) {
 		}
 	}
 
+	// Include the payment method in the hash so switching COD ↔ card
+	// forces shipping recalculation (COD changes courierServicePayer).
+	// Read directly from POST data (available during checkout AJAX);
+	// on the cart page this is empty, which is fine (defaults to COD).
+	$payment_method = sanitize_text_field( $merged['payment_method'] ?? '' );
+
 	foreach ( $packages as &$package ) {
 		$package['speedy_selected_service'] = $selected;
 		$package['speedy_delivery_type']    = $delivery_type;
 		$package['speedy_office_id']        = $office_id;
 		$package['speedy_city_id']          = $city_id;
+		$package['speedy_payment_method']   = $payment_method;
 	}
 
 	return $packages;

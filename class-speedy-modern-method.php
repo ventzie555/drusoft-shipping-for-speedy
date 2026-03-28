@@ -1129,7 +1129,11 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				$order_total = $subtotal;
 			}
 
-			$is_cod          = ( empty( $payment_method ) || 'cod' === $payment_method );
+			// On the cart page there is no payment method selector, so $payment_method
+			// is always empty. Default to non-COD (SENDER) so the customer sees the
+			// real shipping cost. COD-specific RECIPIENT pricing only applies on
+			// checkout when the customer has explicitly selected COD.
+			$is_cod          = ( 'cod' === $payment_method );
 			$cenadostavka    = $this->get_option( 'cenadostavka', 'speedycalculator' );
 
 			// --- 4. Determine pricing overrides BEFORE building the API payload ---
@@ -1249,6 +1253,16 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 						}
 						// If delivery type doesn't match (e.g. cached=address, current=office),
 						// $cache_hit stays false → forces a fresh API call.
+
+						// The payment method affects courierServicePayer (SENDER vs RECIPIENT),
+						// which changes the API price. Invalidate cache on payment method change.
+						if ( $cache_hit ) {
+							$cached_payer  = $cached_payload['payment']['courierServicePayer'] ?? '';
+							$current_payer = $payload['payment']['courierServicePayer'] ?? '';
+							if ( $cached_payer !== $current_payer ) {
+								$cache_hit = false;
+							}
+						}
 					}
 
 					if ( $cache_hit ) {
@@ -1783,8 +1797,6 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 			$cenadostavka_mode = $this->get_option( 'cenadostavka', 'speedycalculator' );
 			$api_pricing_modes = [ 'speedycalculator', 'nadbavka' ];
 
-			// TODO: TEMPORARY – force SENDER payer for testing (remove after testing)
-			//$payment = [ 'courierServicePayer' => 'SENDER' ];
 
 			if ( $is_cod && ! $include_shipping_in_cod && in_array( $cenadostavka_mode, $api_pricing_modes, true ) && ! $has_price_override ) {
 				$payment = [ 'courierServicePayer' => 'RECIPIENT' ];
