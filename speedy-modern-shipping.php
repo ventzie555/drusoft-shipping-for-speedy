@@ -6,7 +6,7 @@
  * Version:     1.0.0
  * Author:      DRUSOFT LTD
  * Author URI:  https://drusoft.dev/
- * Text Domain: speedy-modern-shipping
+ * Text Domain: modern-shipping-for-speedy
  * Domain Path: /languages
  * Requires at least: 6.0
  * Tested up to: 6.9
@@ -123,7 +123,7 @@ add_action( 'plugins_loaded', 'speedy_modern_init' );
 function speedy_modern_init(): void {
 	// Bundled translations for locales not yet on translate.wordpress.org.
 	// phpcs:ignore PluginCheck.CodeAnalysis.DiscouragedFunctions.load_plugin_textdomainFound
-	load_plugin_textdomain( 'speedy-modern-shipping', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+	load_plugin_textdomain( 'modern-shipping-for-speedy', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 }
 
 /**
@@ -353,16 +353,16 @@ function speedy_modern_enqueue_scripts(): void {
 		'current_office_id'  => $current_office,
 		'currency_symbol'    => get_woocommerce_currency_symbol(),
 		'i18n'            => array(
-			'to_address'       => __( 'To Address', 'speedy-modern-shipping' ),
-			'to_office'        => __( 'To Office', 'speedy-modern-shipping' ),
-			'to_automat'       => __( 'To Automat', 'speedy-modern-shipping' ),
-			'select_office'    => __( 'Select Office', 'speedy-modern-shipping' ),
-			'select_automat'   => __( 'Select Automat', 'speedy-modern-shipping' ),
-			'select_from_map'  => __( 'Select from Map', 'speedy-modern-shipping' ),
-			'select_city'      => __( 'Select a city...', 'speedy-modern-shipping' ),
-			'alert_select_city' => __( 'Please select a city first.', 'speedy-modern-shipping' ),
-			'no_results'       => __( 'No results', 'speedy-modern-shipping' ),
-			'select_service'   => __( 'Select Service', 'speedy-modern-shipping' ),
+			'to_address'       => __( 'To Address', 'modern-shipping-for-speedy' ),
+			'to_office'        => __( 'To Office', 'modern-shipping-for-speedy' ),
+			'to_automat'       => __( 'To Automat', 'modern-shipping-for-speedy' ),
+			'select_office'    => __( 'Select Office', 'modern-shipping-for-speedy' ),
+			'select_automat'   => __( 'Select Automat', 'modern-shipping-for-speedy' ),
+			'select_from_map'  => __( 'Select from Map', 'modern-shipping-for-speedy' ),
+			'select_city'      => __( 'Select a city...', 'modern-shipping-for-speedy' ),
+			'alert_select_city' => __( 'Please select a city first.', 'modern-shipping-for-speedy' ),
+			'no_results'       => __( 'No results', 'modern-shipping-for-speedy' ),
+			'select_service'   => __( 'Select Service', 'modern-shipping-for-speedy' ),
 		)
 	);
 
@@ -493,7 +493,7 @@ function speedy_modern_enqueue_admin_scripts( $hook ): void {
 	wp_localize_script( 'speedy-modern-admin-shipping', 'speedy_modern_admin', array(
 		'has_credentials'          => $has_credentials ? '1' : '0',
 		'nonce'                    => wp_create_nonce( 'speedy_modern_admin' ),
-		'i18n_correct_credentials' => __( 'Please correct your credentials and save again.', 'speedy-modern-shipping' ),
+		'i18n_correct_credentials' => __( 'Please correct your credentials and save again.', 'modern-shipping-for-speedy' ),
 	) );
 
 	// Enqueue the settings script for dynamic field visibility
@@ -578,7 +578,7 @@ function speedy_modern_search_cities(): void {
 
 	// Check permissions
 	if ( ! current_user_can( 'manage_woocommerce' ) ) {
-		wp_send_json_error( __( 'Permission denied.', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'Permission denied.', 'modern-shipping-for-speedy' ) );
 	}
 
 	$term = isset( $_GET['term'] ) ? sanitize_text_field( wp_unslash( $_GET['term'] ) ) : '';
@@ -594,7 +594,7 @@ function speedy_modern_search_cities(): void {
 	$password = $credentials['password'] ?? '';
 
 	if ( empty( $username ) || empty( $password ) ) {
-		wp_send_json_error( __( 'No API credentials found.', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'No API credentials found.', 'modern-shipping-for-speedy' ) );
 	}
 
 	// Call Speedy API
@@ -647,7 +647,7 @@ function speedy_modern_search_offices(): void {
 
 	// Check permissions
 	if ( ! current_user_can( 'manage_woocommerce' ) ) {
-		wp_send_json_error( __( 'Permission denied.', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'Permission denied.', 'modern-shipping-for-speedy' ) );
 	}
 
 	$term = isset( $_GET['term'] ) ? sanitize_text_field( wp_unslash( $_GET['term'] ) ) : '';
@@ -674,7 +674,7 @@ function speedy_modern_search_offices(): void {
 		
 		wp_send_json( [ 'results' => $results ] );
 	} else {
-		wp_send_json_error( __( 'Class WC_Speedy_Modern_Method not found.', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'Class WC_Speedy_Modern_Method not found.', 'modern-shipping-for-speedy' ) );
 	}
 }
 
@@ -687,18 +687,18 @@ function speedy_modern_upload_file(): void {
 
 	// Check permissions
 	if ( ! current_user_can( 'manage_woocommerce' ) ) {
-		wp_send_json_error( __( 'Permission denied.', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'Permission denied.', 'modern-shipping-for-speedy' ) );
 	}
 
 	// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- $_FILES is validated by wp_handle_upload / wp_check_filetype.
 	if ( ! isset( $_FILES['file'] ) || empty( $_FILES['file']['name'] ) ) {
-		wp_send_json_error( __( 'No file uploaded.', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'No file uploaded.', 'modern-shipping-for-speedy' ) );
 	}
 
 	// Validate file type (CSV only)
 	$file_type = wp_check_filetype( sanitize_file_name( wp_unslash( $_FILES['file']['name'] ) ) );
 	if ( 'csv' !== $file_type['ext'] ) {
-		wp_send_json_error( __( 'Invalid file type. Please upload a CSV file.', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'Invalid file type. Please upload a CSV file.', 'modern-shipping-for-speedy' ) );
 	}
 
 	if ( ! function_exists( 'wp_handle_upload' ) ) {
@@ -881,7 +881,7 @@ function speedy_modern_get_cities_ajax(): void {
 	$region_code = isset( $_POST['region'] ) ? sanitize_text_field( wp_unslash( $_POST['region'] ) ) : '';
 	
 	if ( empty( $region_code ) ) {
-		wp_send_json_error( __( 'Missing region code', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'Missing region code', 'modern-shipping-for-speedy' ) );
 	}
 
 	global $wpdb;
@@ -891,7 +891,7 @@ function speedy_modern_get_cities_ajax(): void {
 	$region_name = $region_map[ $region_code ] ?? '';
 
 	if ( empty( $region_name ) ) {
-		wp_send_json_error( __( 'Unknown region code', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'Unknown region code', 'modern-shipping-for-speedy' ) );
 	}
 
 	// Exact match for Sofia regions, LIKE for others
@@ -938,7 +938,7 @@ function speedy_modern_check_availability_ajax(): void {
 	$city_id = isset( $_POST['city_id'] ) ? absint( $_POST['city_id'] ) : 0;
 
 	if ( ! $city_id ) {
-		wp_send_json_error( __( 'Missing city ID', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'Missing city ID', 'modern-shipping-for-speedy' ) );
 	}
 
 	global $wpdb;
@@ -989,7 +989,7 @@ function speedy_modern_get_region_by_city_ajax(): void {
 	$city_id = isset( $_POST['city_id'] ) ? absint( $_POST['city_id'] ) : 0;
 
 	if ( ! $city_id ) {
-		wp_send_json_error( __( 'Missing city ID', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'Missing city ID', 'modern-shipping-for-speedy' ) );
 	}
 
 	global $wpdb;
@@ -1003,7 +1003,7 @@ function speedy_modern_get_region_by_city_ajax(): void {
 	);
 
 	if ( ! $region_name ) {
-		wp_send_json_error( __( 'City not found', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'City not found', 'modern-shipping-for-speedy' ) );
 	}
 
 	// Use helper function and flip it for reverse mapping
@@ -1026,7 +1026,7 @@ function speedy_modern_get_region_by_city_ajax(): void {
 	if ( $region_code ) {
 		wp_send_json_success( [ 'region' => $region_code ] );
 	} else {
-		wp_send_json_error( __( 'Region mapping not found for: ', 'speedy-modern-shipping' ) . esc_html( $region_name ) );
+		wp_send_json_error( __( 'Region mapping not found for: ', 'modern-shipping-for-speedy' ) . esc_html( $region_name ) );
 	}
 }
 
@@ -1138,8 +1138,8 @@ function speedy_modern_validate_checkout(): void {
 
 		if ( empty( $office_id ) ) {
 			$error_msg = ( 'office' === $delivery_type ) 
-				? __( 'Please select a Speedy office.', 'speedy-modern-shipping' ) 
-				: __( 'Please select a Speedy automat.', 'speedy-modern-shipping' );
+				? __( 'Please select a Speedy office.', 'modern-shipping-for-speedy' ) 
+				: __( 'Please select a Speedy automat.', 'modern-shipping-for-speedy' );
 			
 			wc_add_notice( $error_msg, 'error' );
 		}
@@ -1159,13 +1159,13 @@ function speedy_modern_select_service_ajax(): void {
 	$service_id = isset( $_POST['service_id'] ) ? absint( $_POST['service_id'] ) : 0;
 
 	if ( ! $service_id || ! WC()->session ) {
-		wp_send_json_error( __( 'Invalid service ID', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'Invalid service ID', 'modern-shipping-for-speedy' ) );
 	}
 
 	$service_options = WC()->session->get( 'speedy_modern_service_options', [] );
 
 	if ( ! isset( $service_options[ $service_id ] ) ) {
-		wp_send_json_error( __( 'Service not available', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'Service not available', 'modern-shipping-for-speedy' ) );
 	}
 
 	$selected = $service_options[ $service_id ];
@@ -1204,7 +1204,7 @@ function speedy_modern_get_services_ajax(): void {
 	check_ajax_referer( 'speedy_modern_public', 'nonce' );
 
 	if ( ! WC()->session ) {
-		wp_send_json_error( __( 'No session', 'speedy-modern-shipping' ) );
+		wp_send_json_error( __( 'No session', 'modern-shipping-for-speedy' ) );
 	}
 
 	$service_options = WC()->session->get( 'speedy_modern_service_options', [] );

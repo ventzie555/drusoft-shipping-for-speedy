@@ -23,8 +23,8 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 
 			$this->id                 = 'speedy_modern';
 			$this->instance_id        = absint( $instance_id );
-			$this->method_title       = __( 'Speedy Modern', 'speedy-modern-shipping' );
-			$this->method_description = __( 'Fresh, conflict-free Speedy delivery for Bulgaria.', 'speedy-modern-shipping' );
+			$this->method_title       = __( 'Speedy Modern', 'modern-shipping-for-speedy' );
+			$this->method_description = __( 'Fresh, conflict-free Speedy delivery for Bulgaria.', 'modern-shipping-for-speedy' );
 
 			$this->supports = array(
 				'shipping-zones',
@@ -45,7 +45,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 			$this->init_settings();
 
 			// Define user-set variables
-			$this->title = $this->get_option( 'title', __( 'Speedy Delivery', 'speedy-modern-shipping' ) );
+			$this->title = $this->get_option( 'title', __( 'Speedy Delivery', 'modern-shipping-for-speedy' ) );
 
 			// Save settings in admin
 			add_action( 'woocommerce_update_options_shipping_' . $this->id, array( $this, 'process_admin_options' ) );
@@ -148,12 +148,12 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				if ( is_wp_error( $validation ) ) {
 					$error_message = sprintf(
 						/* translators: %s: error message from the Speedy API */
-						__( 'Speedy API authentication failed: %s', 'speedy-modern-shipping' ),
+						__( 'Speedy API authentication failed: %s', 'modern-shipping-for-speedy' ),
 						$validation->get_error_message()
 					);
 
 					$this->add_error(
-						$error_message . ' ' . __( 'Credentials have been cleared.', 'speedy-modern-shipping' )
+						$error_message . ' ' . __( 'Credentials have been cleared.', 'modern-shipping-for-speedy' )
 					);
 
 					// Blank out the credentials in the post data so they save as empty
@@ -243,7 +243,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 			if ( 401 === $code || ( isset( $data['error'] ) ) ) {
 				$api_message = $data['error']['message']
 					?? $data['error']
-					?? __( 'Invalid username or password.', 'speedy-modern-shipping' );
+					?? __( 'Invalid username or password.', 'modern-shipping-for-speedy' );
 
 				return new WP_Error( 'speedy_auth_failed', $api_message );
 			}
@@ -254,7 +254,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 					'speedy_api_error',
 					sprintf(
 						/* translators: %d: HTTP status code */
-						__( 'Unexpected API response (HTTP %d).', 'speedy-modern-shipping' ),
+						__( 'Unexpected API response (HTTP %d).', 'modern-shipping-for-speedy' ),
 						$code
 					)
 				);
@@ -267,7 +267,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 
 			return new WP_Error(
 				'speedy_unexpected_response',
-				__( 'The API returned an unexpected response. Please check your credentials.', 'speedy-modern-shipping' )
+				__( 'The API returned an unexpected response. Please check your credentials.', 'modern-shipping-for-speedy' )
 			);
 		}
 
@@ -307,27 +307,27 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 			$this->instance_form_fields = array(
 				// --- SECTION: CONNECTION ---
 				'section_api' => [
-					'title' => __( 'Speedy API Connection', 'speedy-modern-shipping' ),
+					'title' => __( 'Speedy API Connection', 'modern-shipping-for-speedy' ),
 					'type'  => 'title',
 				],
 				'enabled' => [
-					'title'   => __( 'Module Status', 'speedy-modern-shipping' ),
+					'title'   => __( 'Module Status', 'modern-shipping-for-speedy' ),
 					'type'    => 'checkbox',
-					'label'   => __( 'Enable/Disable', 'speedy-modern-shipping' ),
+					'label'   => __( 'Enable/Disable', 'modern-shipping-for-speedy' ),
 					'default' => 'yes',
 				],
 				'title' => [
-					'title'       => __( 'Method Title', 'speedy-modern-shipping' ),
+					'title'       => __( 'Method Title', 'modern-shipping-for-speedy' ),
 					'type'        => 'text',
-					'default'     => __( 'Speedy Delivery', 'speedy-modern-shipping' ),
+					'default'     => __( 'Speedy Delivery', 'modern-shipping-for-speedy' ),
 					'desc_tip'    => true,
 				],
 				'speedy_username' => [
-					'title' => __( 'Username', 'speedy-modern-shipping' ),
+					'title' => __( 'Username', 'modern-shipping-for-speedy' ),
 					'type'  => 'text'
 				],
 				'speedy_password' => [
-					'title' => __( 'Password', 'speedy-modern-shipping' ),
+					'title' => __( 'Password', 'modern-shipping-for-speedy' ),
 					'type'  => 'password',
 				],
 			);
@@ -338,7 +338,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 			} else {
 				$this->instance_form_fields['info_msg'] = [
 					'type'        => 'title',
-					'description' => __( 'Please save your credentials to unlock shipping options.', 'speedy-modern-shipping' ),
+					'description' => __( 'Please save your credentials to unlock shipping options.', 'modern-shipping-for-speedy' ),
 				];
 			}
 		}
@@ -378,110 +378,110 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 
 				// --- SECTION: SENDER DETAILS ---
 				'section_sender' => [
-					'title' => __( 'Sender Information', 'speedy-modern-shipping' ),
+					'title' => __( 'Sender Information', 'modern-shipping-for-speedy' ),
 					'type'  => 'title',
 				],
 				'sender_id' => [
-					'title'   => __( 'Sender (Object)', 'speedy-modern-shipping' ),
+					'title'   => __( 'Sender (Object)', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'options' => $this->get_speedy_clients(),
 				],
 				'sender_name' => [
-					'title' => __( 'Contact Person', 'speedy-modern-shipping' ),
+					'title' => __( 'Contact Person', 'modern-shipping-for-speedy' ),
 					'type'  => 'text'
 				],
 				'sender_email' => [
-					'title' => __( 'Email', 'speedy-modern-shipping' ),
+					'title' => __( 'Email', 'modern-shipping-for-speedy' ),
 					'type'  => 'email'
 				],
 				'sender_phone' => [
-					'title' => __( 'Phone Number', 'speedy-modern-shipping' ),
+					'title' => __( 'Phone Number', 'modern-shipping-for-speedy' ),
 					'type'  => 'text'
 				],
 				'sender_city' => [
-					'title'   => __( 'City', 'speedy-modern-shipping' ),
+					'title'   => __( 'City', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'class'   => 'speedy-city-search',
 					'options' => [ $current_city => speedy_modern_get_city_name_by_id( $current_city ) ],
 					'custom_attributes' => [
-						'data-placeholder' => __( 'Search for a city...', 'speedy-modern-shipping' ),
+						'data-placeholder' => __( 'Search for a city...', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'sender_officeyesno' => [
-					'title'   => __( 'Send from Office', 'speedy-modern-shipping' ),
+					'title'   => __( 'Send from Office', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'NO',
 					'options' => [
-						'NO'  => __( 'No', 'speedy-modern-shipping' ),
-						'YES' => __( 'Yes', 'speedy-modern-shipping' ),
+						'NO'  => __( 'No', 'modern-shipping-for-speedy' ),
+						'YES' => __( 'Yes', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'sender_office' => [
-					'title'   => __( 'Shipping from Office', 'speedy-modern-shipping' ),
+					'title'   => __( 'Shipping from Office', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'class'   => 'speedy-office-search',
 					'options' => [ $current_office => speedy_modern_get_office_label_by_id( $current_office ) ],
 					'custom_attributes' => [
-						'data-placeholder' => __( 'Search for an office...', 'speedy-modern-shipping' ),
+						'data-placeholder' => __( 'Search for an office...', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'sender_time' => [
-					'title'       => __( 'Working Day End Time', 'speedy-modern-shipping' ),
+					'title'       => __( 'Working Day End Time', 'modern-shipping-for-speedy' ),
 					'type'        => 'text',
 					'placeholder' => '17:30',
-					'description' => __( 'Format HH:MM', 'speedy-modern-shipping' ),
+					'description' => __( 'Format HH:MM', 'modern-shipping-for-speedy' ),
 				],
 
 				// --- SECTION: SHIPMENT SETTINGS ---
 				'section_shipment' => [
-					'title' => __( 'Shipment Settings', 'speedy-modern-shipping' ),
+					'title' => __( 'Shipment Settings', 'modern-shipping-for-speedy' ),
 					'type'  => 'title',
 				],
 				'uslugi' => [
-					'title'    => __( 'Active Services', 'speedy-modern-shipping' ),
+					'title'    => __( 'Active Services', 'modern-shipping-for-speedy' ),
 					'type'     => 'multiselect',
 					'options'  => $this->get_speedy_services(),
 					'default'  => '505',
 				],
 				'opakovka' => [
-					'title'   => __( 'Packaging', 'speedy-modern-shipping' ),
+					'title'   => __( 'Packaging', 'modern-shipping-for-speedy' ),
 					'type'    => 'text',
 					'default' => 'BOX'
 				],
 				'teglo' => [
-					'title'   => __( 'Default Weight', 'speedy-modern-shipping' ),
+					'title'   => __( 'Default Weight', 'modern-shipping-for-speedy' ),
 					'type'    => 'number',
 					'default' => '1'
 				],
 				'obqvena' => [
-					'title'   => __( 'Declared Value', 'speedy-modern-shipping' ),
+					'title'   => __( 'Declared Value', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'NO',
 					'options' => [
-						'NO'  => __( 'No', 'speedy-modern-shipping' ),
-						'YES' => __( 'Yes', 'speedy-modern-shipping' ),
+						'NO'  => __( 'No', 'modern-shipping-for-speedy' ),
+						'YES' => __( 'Yes', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'chuplivost' => [
-					'title'   => __( 'Fragile', 'speedy-modern-shipping' ),
+					'title'   => __( 'Fragile', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'NO',
 					'options' => [
-						'NO'  => __( 'No', 'speedy-modern-shipping' ),
-						'YES' => __( 'Yes', 'speedy-modern-shipping' ),
+						'NO'  => __( 'No', 'modern-shipping-for-speedy' ),
+						'YES' => __( 'Yes', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'saturdayoption' => [
-					'title'   => __( 'Saturday Delivery', 'speedy-modern-shipping' ),
+					'title'   => __( 'Saturday Delivery', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'NO',
 					'options' => [
-						'NO'  => __( 'No', 'speedy-modern-shipping' ),
-						'YES' => __( 'Yes', 'speedy-modern-shipping' ),
+						'NO'  => __( 'No', 'modern-shipping-for-speedy' ),
+						'YES' => __( 'Yes', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'special_requirements' => [
-					'title'    => __( 'Special Requirements', 'speedy-modern-shipping' ),
+					'title'    => __( 'Special Requirements', 'modern-shipping-for-speedy' ),
 					'type'     => 'select',
 					'default'  => '0',
 					'options'  => $this->get_speedy_special_requirements(),
@@ -489,194 +489,194 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 
 				// --- SECTION: PRICING & PAYMENT ---
 				'section_pricing' => [
-					'title' => __( 'Pricing & Payment', 'speedy-modern-shipping' ),
+					'title' => __( 'Pricing & Payment', 'modern-shipping-for-speedy' ),
 					'type'  => 'title',
 				],
 				'cenadostavka' => [
-					'title'   => __( 'Pricing Method', 'speedy-modern-shipping' ),
+					'title'   => __( 'Pricing Method', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'speedycalculator',
 					'options' => [
-						'speedycalculator' => __( 'Speedy Calculator', 'speedy-modern-shipping' ),
-						'fixedprices'      => __( 'Fixed Price', 'speedy-modern-shipping' ),
-						'freeshipping'     => __( 'Free Shipping', 'speedy-modern-shipping' ),
-						'fileprices'       => __( 'Custom Prices', 'speedy-modern-shipping' ),
-						'nadbavka'         => __( 'Calculator + Surcharge', 'speedy-modern-shipping' ),
+						'speedycalculator' => __( 'Speedy Calculator', 'modern-shipping-for-speedy' ),
+						'fixedprices'      => __( 'Fixed Price', 'modern-shipping-for-speedy' ),
+						'freeshipping'     => __( 'Free Shipping', 'modern-shipping-for-speedy' ),
+						'fileprices'       => __( 'Custom Prices', 'modern-shipping-for-speedy' ),
+						'nadbavka'         => __( 'Calculator + Surcharge', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'suma_nadbavka'          => [
-					'title'        => __( 'Surcharge Amount', 'speedy-modern-shipping' ),
+					'title'        => __( 'Surcharge Amount', 'modern-shipping-for-speedy' ),
 					'type'         => 'number',
 					'custom_class' => 'suma-nadbavka',
 					'custom_attributes' => [ 'step' => '0.01' ],
 				],
 				'fileceni'               => [
-					'title'        => __( 'CSV Price File', 'speedy-modern-shipping' ),
+					'title'        => __( 'CSV Price File', 'modern-shipping-for-speedy' ),
 					'type'         => 'text', // Changed to text for JS handling
 					'class'        => 'speedy-file-input-wrapper', // Hook for JS
-					'description'  => __( 'Path to CSV file with custom prices', 'speedy-modern-shipping' ),
+					'description'  => __( 'Path to CSV file with custom prices', 'modern-shipping-for-speedy' ),
 				],
 				'free_shipping' => [
-					'title'       => __( 'Free Shipping', 'speedy-modern-shipping' ),
-					'description' => __( 'Sum ABOVE the specified here activates free shipping to office/address. Explanation: If you want users to receive free shipping when reaching X amount - enter it with 0.01 less in the respective field. For example, for free shipping when reaching 100lv - enter 99.99 etc.', 'speedy-modern-shipping' ),
+					'title'       => __( 'Free Shipping', 'modern-shipping-for-speedy' ),
+					'description' => __( 'Sum ABOVE the specified here activates free shipping to office/address. Explanation: If you want users to receive free shipping when reaching X amount - enter it with 0.01 less in the respective field. For example, for free shipping when reaching 100lv - enter 99.99 etc.', 'modern-shipping-for-speedy' ),
 					'type'        => 'checkbox',
 					'default'     => 'no'
 				],
 				'free_shipping_automat'  => [
-					'title'        => __( 'Free Shipping to Automat > Amount', 'speedy-modern-shipping' ),
+					'title'        => __( 'Free Shipping to Automat > Amount', 'modern-shipping-for-speedy' ),
 					'type'         => 'number',
 					'custom_class' => 'free-shipping-automat',
 					'custom_attributes' => [ 'step' => '0.01' ],
 				],
 				'free_shipping_office'   => [
-					'title'        => __( 'Free Shipping to Office > Amount', 'speedy-modern-shipping' ),
+					'title'        => __( 'Free Shipping to Office > Amount', 'modern-shipping-for-speedy' ),
 					'type'         => 'number',
 					'custom_class' => 'free-shipping-office',
 					'custom_attributes' => [ 'step' => '0.01' ],
 				],
 				'free_shipping_address'  => [
-					'title'        => __( 'Free Shipping to Address > Amount', 'speedy-modern-shipping' ),
+					'title'        => __( 'Free Shipping to Address > Amount', 'modern-shipping-for-speedy' ),
 					'type'         => 'number',
 					'custom_class' => 'free-shipping-address',
 					'custom_attributes' => [ 'step' => '0.01' ],
 				],
 				'fixed_shipping' => [
-					'title'       => __( 'Fixed Shipping Price', 'speedy-modern-shipping' ),
-					'description' => __( 'Enable fixed shipping price to office/address', 'speedy-modern-shipping' ),
+					'title'       => __( 'Fixed Shipping Price', 'modern-shipping-for-speedy' ),
+					'description' => __( 'Enable fixed shipping price to office/address', 'modern-shipping-for-speedy' ),
 					'type'        => 'checkbox',
 					'default'     => 'no'
 				],
 				'fixed_shipping_automat' => [
-					'title'        => __( 'Fixed Price to Automat', 'speedy-modern-shipping' ),
+					'title'        => __( 'Fixed Price to Automat', 'modern-shipping-for-speedy' ),
 					'type'         => 'number',
 					'custom_class' => 'fixed-shipping-automat',
 					'custom_attributes' => [ 'step' => '0.01' ],
 				],
 				'fixed_shipping_office' => [
-					'title' => __( 'Fixed Price to Office', 'speedy-modern-shipping' ),
+					'title' => __( 'Fixed Price to Office', 'modern-shipping-for-speedy' ),
 					'type'  => 'number',
 					'custom_class' => 'fixed-shipping-office',
 					'custom_attributes' => [ 'step' => '0.01' ],
 				],
 				'fixed_shipping_address' => [
-					'title' => __( 'Fixed Price to Address', 'speedy-modern-shipping' ),
+					'title' => __( 'Fixed Price to Address', 'modern-shipping-for-speedy' ),
 					'type'  => 'number',
 					'custom_class' => 'fixed-shipping-address',
 					'custom_attributes' => [ 'step' => '0.01' ],
 				],
 				'moneytransfer'          => [
-					'title'   => __( 'Money Transfer Type', 'speedy-modern-shipping' ),
+					'title'   => __( 'Money Transfer Type', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'NO',
 					'options' => [
-						'NO'        => __( 'Cash on Delivery', 'speedy-modern-shipping' ),
-						'YES'       => __( 'Postal Money Transfer', 'speedy-modern-shipping' ),
-						'fiscal'    => __( 'Fiscal Receipt (Items)', 'speedy-modern-shipping' ),
-						'fiscalone' => __( 'Fiscal Receipt (Groups)', 'speedy-modern-shipping' )
+						'NO'        => __( 'Cash on Delivery', 'modern-shipping-for-speedy' ),
+						'YES'       => __( 'Postal Money Transfer', 'modern-shipping-for-speedy' ),
+						'fiscal'    => __( 'Fiscal Receipt (Items)', 'modern-shipping-for-speedy' ),
+						'fiscalone' => __( 'Fiscal Receipt (Groups)', 'modern-shipping-for-speedy' )
 					],
 				],
 				'includeshippingprice'   => [
-					'title'   => __( 'Include Shipping Price in COD', 'speedy-modern-shipping' ),
+					'title'   => __( 'Include Shipping Price in COD', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'NO',
 					'options' => [
-						'NO'  => __( 'No', 'speedy-modern-shipping' ),
-						'YES' => __( 'Yes', 'speedy-modern-shipping' ),
+						'NO'  => __( 'No', 'modern-shipping-for-speedy' ),
+						'YES' => __( 'Yes', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'administrative'         => [
-					'title'   => __( 'Administrative Fee', 'speedy-modern-shipping' ),
+					'title'   => __( 'Administrative Fee', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'NO',
 					'options' => [
-						'NO'  => __( 'No', 'speedy-modern-shipping' ),
-						'YES' => __( 'Yes', 'speedy-modern-shipping' ),
+						'NO'  => __( 'No', 'modern-shipping-for-speedy' ),
+						'YES' => __( 'Yes', 'modern-shipping-for-speedy' ),
 					],
 				],
 
 				// --- SECTION: WORKFLOW & OPTIONS ---
 				'section_options' => [
-					'title' => __( 'Workflow & Options', 'speedy-modern-shipping' ),
+					'title' => __( 'Workflow & Options', 'modern-shipping-for-speedy' ),
 					'type'  => 'title',
 				],
 				'generate_waybill' => [
-					'title'       => __( 'Automatic Waybill', 'speedy-modern-shipping' ),
-					'description' => __( 'Automatically create waybill on order completion', 'speedy-modern-shipping' ),
+					'title'       => __( 'Automatic Waybill', 'modern-shipping-for-speedy' ),
+					'description' => __( 'Automatically create waybill on order completion', 'modern-shipping-for-speedy' ),
 					'type'        => 'checkbox',
 					'default'     => 'no'
 				],
 				'printer'                => [
-					'title'   => __( 'Label Printer', 'speedy-modern-shipping' ),
+					'title'   => __( 'Label Printer', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'NO',
 					'options' => [
-						'NO'  => __( 'No', 'speedy-modern-shipping' ),
-						'YES' => __( 'Yes', 'speedy-modern-shipping' ),
+						'NO'  => __( 'No', 'modern-shipping-for-speedy' ),
+						'YES' => __( 'Yes', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'additionalcopy'         => [
-					'title'   => __( 'Additional Waybill Copy', 'speedy-modern-shipping' ),
+					'title'   => __( 'Additional Waybill Copy', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'NO',
 					'options' => [
-						'NO'  => __( 'No', 'speedy-modern-shipping' ),
-						'YES' => __( 'Yes', 'speedy-modern-shipping' ),
+						'NO'  => __( 'No', 'modern-shipping-for-speedy' ),
+						'YES' => __( 'Yes', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'test_before_pay' => [
-					'title'   => __( 'Options Before Payment', 'speedy-modern-shipping' ),
+					'title'   => __( 'Options Before Payment', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'NO',
 					'options' => [
-						'NO'   => __( 'None', 'speedy-modern-shipping' ),
-						'OPEN' => __( 'Open', 'speedy-modern-shipping' ),
-						'TEST' => __( 'Test', 'speedy-modern-shipping' ),
+						'NO'   => __( 'None', 'modern-shipping-for-speedy' ),
+						'OPEN' => __( 'Open', 'modern-shipping-for-speedy' ),
+						'TEST' => __( 'Test', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'testplatec'             => [
-					'title'   => __( 'Return Shipment Payer (Test/Open)', 'speedy-modern-shipping' ),
+					'title'   => __( 'Return Shipment Payer (Test/Open)', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'SENDER',
 					'options' => [
-						'SENDER'    => __( 'Sender', 'speedy-modern-shipping' ),
-						'RECIPIENT' => __( 'Recipient', 'speedy-modern-shipping' ),
+						'SENDER'    => __( 'Sender', 'modern-shipping-for-speedy' ),
+						'RECIPIENT' => __( 'Recipient', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'autoclose'              => [
-					'title'   => __( 'Auto Close Options at Automat', 'speedy-modern-shipping' ),
+					'title'   => __( 'Auto Close Options at Automat', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'NO',
 					'options' => [
-						'NO'  => __( 'No', 'speedy-modern-shipping' ),
-						'YES' => __( 'Yes', 'speedy-modern-shipping' ),
+						'NO'  => __( 'No', 'modern-shipping-for-speedy' ),
+						'YES' => __( 'Yes', 'modern-shipping-for-speedy' ),
 					],
 				],
 
 				// --- SECTION: RETURNS & VOUCHERS ---
 				'section_returns' => [
-					'title' => __( 'Returns & Vouchers', 'speedy-modern-shipping' ),
+					'title' => __( 'Returns & Vouchers', 'modern-shipping-for-speedy' ),
 					'type'  => 'title',
 				],
 				'vaucher' => [
-					'title'   => __( 'Return Voucher', 'speedy-modern-shipping' ),
+					'title'   => __( 'Return Voucher', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'NO',
 					'options' => [
-						'NO'  => __( 'No', 'speedy-modern-shipping' ),
-						'YES' => __( 'Yes', 'speedy-modern-shipping' ),
+						'NO'  => __( 'No', 'modern-shipping-for-speedy' ),
+						'YES' => __( 'Yes', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'vaucherpayer' => [
-					'title'   => __( 'Return Payer', 'speedy-modern-shipping' ),
+					'title'   => __( 'Return Payer', 'modern-shipping-for-speedy' ),
 					'type'    => 'select',
 					'default' => 'SENDER',
 					'options' => [
-						'SENDER'    => __( 'Sender', 'speedy-modern-shipping' ),
-						'RECIPIENT' => __( 'Recipient', 'speedy-modern-shipping' ),
+						'SENDER'    => __( 'Sender', 'modern-shipping-for-speedy' ),
+						'RECIPIENT' => __( 'Recipient', 'modern-shipping-for-speedy' ),
 					],
 				],
 				'vaucherpayerdays'       => [
-					'title'        => __( 'Voucher Validity (Days)', 'speedy-modern-shipping' ),
+					'title'        => __( 'Voucher Validity (Days)', 'modern-shipping-for-speedy' ),
 					'type'         => 'number',
 				],
 			];
@@ -698,7 +698,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				return $clients;
 			}
 
-			$clients = [ '0' => __( '-- Select Client --', 'speedy-modern-shipping' ) ];
+			$clients = [ '0' => __( '-- Select Client --', 'modern-shipping-for-speedy' ) ];
 
 			$username = $this->get_option( 'speedy_username' );
 			$password = $this->get_option( 'speedy_password' );
@@ -729,7 +729,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 
 					$clients[ $client_id ] = sprintf(
 					/* translators: 1: ID, 2: Name, 3: Object, 4: Address */
-						__( 'ID: %1$s, %2$s, %3$s, Address: %4$s', 'speedy-modern-shipping' ),
+						__( 'ID: %1$s, %2$s, %3$s, Address: %4$s', 'modern-shipping-for-speedy' ),
 						$client_id,
 						$client_name,
 						$object_name,
@@ -793,7 +793,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 		 * @return array Associative array of [officeId => "Name - Address"]
 		 */
 		public static function get_speedy_offices( ?string $username = null, ?string $password = null, ?string $term = null ): array {
-			$offices = [ '0' => __( '-- Select Office --', 'speedy-modern-shipping' ) ];
+			$offices = [ '0' => __( '-- Select Office --', 'modern-shipping-for-speedy' ) ];
 
 			// Try to fetch from local DB first
 			global $wpdb;
@@ -985,7 +985,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				return $requirements;
 			}
 
-			$requirements = [ '0' => __( '-- None --', 'speedy-modern-shipping' ) ];
+			$requirements = [ '0' => __( '-- None --', 'modern-shipping-for-speedy' ) ];
 			$username = $this->get_option( 'speedy_username' );
 			$password = $this->get_option( 'speedy_password' );
 
@@ -1129,10 +1129,6 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				$order_total = $subtotal;
 			}
 
-			// On the cart page there is no payment method selector, so $payment_method
-			// is always empty. Default to non-COD (SENDER) so the customer sees the
-			// real shipping cost. COD-specific RECIPIENT pricing only applies on
-			// checkout when the customer has explicitly selected COD.
 			$is_cod          = ( 'cod' === $payment_method );
 			$cenadostavka    = $this->get_option( 'cenadostavka', 'speedycalculator' );
 
@@ -1220,7 +1216,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 				// Append "free shipping" hint to the label
 				$label = $this->title;
 				if ( $is_free_shipping ) {
-					$label .= ' (' . __( 'Free shipping', 'speedy-modern-shipping' ) . ')';
+					$label .= ' (' . __( 'Free shipping', 'modern-shipping-for-speedy' ) . ')';
 				}
 
 				$this->add_rate( [
@@ -1351,7 +1347,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 					}
 
 					$service_name = $service_names[ $service_id ]
-						?? ( __( 'Service', 'speedy-modern-shipping' ) . ' ' . $service_id );
+						?? ( __( 'Service', 'modern-shipping-for-speedy' ) . ' ' . $service_id );
 
 					$service_options[ $service_id ] = [
 						'id'   => $service_id,
@@ -1993,7 +1989,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 
 					$fiscal_items[] = [
 						/* translators: %s: VAT group identifier (e.g. А, Б, Г) */
-						'description'   => sprintf( __( 'Products from order (group %s)', 'speedy-modern-shipping' ), $group ),
+						'description'   => sprintf( __( 'Products from order (group %s)', 'modern-shipping-for-speedy' ), $group ),
 						'vatGroup'      => $group,
 						'amount'        => round( $sum['ex'], 2 ),
 						'amountWithVat' => round( $sum['in'], 2 ),
@@ -2014,7 +2010,7 @@ if ( ! class_exists( 'WC_Speedy_Modern_Method' ) ) {
 					$shipping_amount_ex_vat = $shipping_amount_with_vat / ( 1 + $shipping_vat_rate );
 
 					$fiscal_items[] = [
-						'description'   => __( 'Delivery', 'speedy-modern-shipping' ),
+						'description'   => __( 'Delivery', 'modern-shipping-for-speedy' ),
 						'vatGroup'      => 'Б',
 						'amount'        => round( $shipping_amount_ex_vat, 2 ),
 						'amountWithVat' => round( $shipping_amount_with_vat, 2 ),

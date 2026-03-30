@@ -70,7 +70,7 @@ if ( ! class_exists( 'Speedy_Modern_Waybill_Generator' ) ) {
 			$order = wc_get_order( $order_id );
 
 			if ( ! $order ) {
-				return new WP_Error( 'invalid_order', __( 'Invalid order ID.', 'speedy-modern-shipping' ) );
+				return new WP_Error( 'invalid_order', __( 'Invalid order ID.', 'modern-shipping-for-speedy' ) );
 			}
 
 			// Prevent re-generation if a waybill already exists
@@ -81,7 +81,7 @@ if ( ! class_exists( 'Speedy_Modern_Waybill_Generator' ) ) {
 			// Retrieve the payload saved during checkout
 			$payload = $order->get_meta( '_speedy_order_data' );
 			if ( empty( $payload ) ) {
-				return new WP_Error( 'no_payload', __( 'No Speedy shipping data found for this order.', 'speedy-modern-shipping' ) );
+				return new WP_Error( 'no_payload', __( 'No Speedy shipping data found for this order.', 'modern-shipping-for-speedy' ) );
 			}
 
 			// Get credentials from the specific shipping instance
@@ -94,7 +94,7 @@ if ( ! class_exists( 'Speedy_Modern_Waybill_Generator' ) ) {
 			$password = $settings['speedy_password'] ?? '';
 
 			if ( ! $username || ! $password ) {
-				return new WP_Error( 'no_credentials', __( 'Speedy credentials are not configured for this shipping method.', 'speedy-modern-shipping' ) );
+				return new WP_Error( 'no_credentials', __( 'Speedy credentials are not configured for this shipping method.', 'modern-shipping-for-speedy' ) );
 			}
 
 			// --- Finalize the Payload ---
@@ -125,7 +125,7 @@ if ( ! class_exists( 'Speedy_Modern_Waybill_Generator' ) ) {
 				}
 				$description = implode( ', ', $items );
 				if ( empty( $description ) ) {
-					$description = __( 'Order #', 'speedy-modern-shipping' ) . $order->get_order_number();
+					$description = __( 'Order #', 'modern-shipping-for-speedy' ) . $order->get_order_number();
 				}
 				// Speedy limits this field — truncate to 100 chars
 				$payload['content']['contents'] = mb_substr( $description, 0, 100 );
@@ -137,7 +137,7 @@ if ( ! class_exists( 'Speedy_Modern_Waybill_Generator' ) ) {
 			$payload['recipient']['email']            = $order->get_billing_email();
 
 			// Add order reference
-			$payload['ref1'] = __( 'Order #', 'speedy-modern-shipping' ) . $order->get_order_number();
+			$payload['ref1'] = __( 'Order #', 'modern-shipping-for-speedy' ) . $order->get_order_number();
 
 			// If delivery is to address, use addressNote
 			if ( isset( $payload['recipient']['addressLocation'] ) ) {
@@ -160,7 +160,7 @@ if ( ! class_exists( 'Speedy_Modern_Waybill_Generator' ) ) {
 			] );
 
 			if ( is_wp_error( $response ) ) {
-				$order->add_order_note( __( 'Speedy Waybill Error: ', 'speedy-modern-shipping' ) . $response->get_error_message() );
+				$order->add_order_note( __( 'Speedy Waybill Error: ', 'modern-shipping-for-speedy' ) . $response->get_error_message() );
 				return $response;
 			}
 
@@ -168,8 +168,8 @@ if ( ! class_exists( 'Speedy_Modern_Waybill_Generator' ) ) {
 
 			// --- Handle API Response ---
 			if ( isset( $body['error'] ) ) {
-				$error_message = $body['error']['message'] ?? __( 'Unknown API error', 'speedy-modern-shipping' );
-				$order->add_order_note( __( 'Speedy Waybill Error: ', 'speedy-modern-shipping' ) . $error_message );
+				$error_message = $body['error']['message'] ?? __( 'Unknown API error', 'modern-shipping-for-speedy' );
+				$order->add_order_note( __( 'Speedy Waybill Error: ', 'modern-shipping-for-speedy' ) . $error_message );
 				return new WP_Error( 'api_error', $error_message );
 			}
 
@@ -179,13 +179,13 @@ if ( ! class_exists( 'Speedy_Modern_Waybill_Generator' ) ) {
 				// Save the waybill ID and the full response to the order
 				$order->update_meta_data( '_speedy_waybill_id', $waybill_id );
 				$order->update_meta_data( '_speedy_waybill_response', $body );
-				$order->add_order_note( __( 'Speedy Waybill Created: ', 'speedy-modern-shipping' ) . $waybill_id );
+				$order->add_order_note( __( 'Speedy Waybill Created: ', 'modern-shipping-for-speedy' ) . $waybill_id );
 				$order->save();
 
 				return $waybill_id;
 			}
 
-			return new WP_Error( 'unexpected_response', __( 'Unexpected response from Speedy API.', 'speedy-modern-shipping' ) );
+			return new WP_Error( 'unexpected_response', __( 'Unexpected response from Speedy API.', 'modern-shipping-for-speedy' ) );
 		}
 	}
 }

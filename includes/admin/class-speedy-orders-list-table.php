@@ -23,8 +23,8 @@ class Speedy_Orders_List_Table extends WP_List_Table {
 	 */
 	public function __construct() {
 		parent::__construct( [
-			'singular' => __( 'Speedy Order', 'speedy-modern-shipping' ),
-			'plural'   => __( 'Speedy Orders', 'speedy-modern-shipping' ),
+			'singular' => __( 'Speedy Order', 'modern-shipping-for-speedy' ),
+			'plural'   => __( 'Speedy Orders', 'modern-shipping-for-speedy' ),
 			'ajax'     => false,
 		] );
 	}
@@ -37,11 +37,11 @@ class Speedy_Orders_List_Table extends WP_List_Table {
 	public function get_columns(): array {
 		return [
 			'cb'       => '<input type="checkbox" />',
-			'order'    => __( 'Order', 'speedy-modern-shipping' ),
-			'waybill'  => __( 'Waybill', 'speedy-modern-shipping' ),
-			'customer' => __( 'Customer', 'speedy-modern-shipping' ),
-			'status'   => __( 'Status', 'speedy-modern-shipping' ),
-			'date'     => __( 'Date', 'speedy-modern-shipping' ),
+			'order'    => __( 'Order', 'modern-shipping-for-speedy' ),
+			'waybill'  => __( 'Waybill', 'modern-shipping-for-speedy' ),
+			'customer' => __( 'Customer', 'modern-shipping-for-speedy' ),
+			'status'   => __( 'Status', 'modern-shipping-for-speedy' ),
+			'date'     => __( 'Date', 'modern-shipping-for-speedy' ),
 		];
 	}
 
@@ -127,7 +127,7 @@ class Speedy_Orders_List_Table extends WP_List_Table {
 		$waybill_id = $item->get_meta( '_speedy_waybill_id' );
 
 		if ( ! $waybill_id ) {
-			return '<button class="button speedy-generate-waybill" data-order-id="' . esc_attr( $item->get_id() ) . '">' . esc_html__( 'Generate', 'speedy-modern-shipping' ) . '</button>';
+			return '<button class="button speedy-generate-waybill" data-order-id="' . esc_attr( $item->get_id() ) . '">' . esc_html__( 'Generate', 'modern-shipping-for-speedy' ) . '</button>';
 		}
 
 		$print_url = wp_nonce_url(
@@ -136,15 +136,15 @@ class Speedy_Orders_List_Table extends WP_List_Table {
 		);
 
 		$actions = [
-			'print'   => sprintf( '<a href="%s" target="_blank">%s</a>', esc_url( $print_url ), esc_html__( 'Print', 'speedy-modern-shipping' ) ),
-			'cancel'  => sprintf( '<a href="#" class="speedy-cancel-shipment" data-order-id="%d">%s</a>', esc_attr( $item->get_id() ), esc_html__( 'Cancel', 'speedy-modern-shipping' ) ),
+			'print'   => sprintf( '<a href="%s" target="_blank">%s</a>', esc_url( $print_url ), esc_html__( 'Print', 'modern-shipping-for-speedy' ) ),
+			'cancel'  => sprintf( '<a href="#" class="speedy-cancel-shipment" data-order-id="%d">%s</a>', esc_attr( $item->get_id() ), esc_html__( 'Cancel', 'modern-shipping-for-speedy' ) ),
 		];
 
 		$courier_requested = $item->get_meta( '_speedy_courier_requested' );
 		if ( 'yes' === $courier_requested ) {
-			$actions['courier'] = '<span style="color: green;">' . esc_html__( 'Requested', 'speedy-modern-shipping' ) . '</span>';
+			$actions['courier'] = '<span style="color: green;">' . esc_html__( 'Requested', 'modern-shipping-for-speedy' ) . '</span>';
 		} else {
-			$actions['courier'] = sprintf( '<a href="#" class="speedy-request-courier" data-order-id="%d">%s</a>', esc_attr( $item->get_id() ), esc_html__( 'Request Courier', 'speedy-modern-shipping' ) );
+			$actions['courier'] = sprintf( '<a href="#" class="speedy-request-courier" data-order-id="%d">%s</a>', esc_attr( $item->get_id() ), esc_html__( 'Request Courier', 'modern-shipping-for-speedy' ) );
 		}
 
 		$track_url    = 'https://www.speedy.bg/track?id=' . urlencode( $waybill_id );

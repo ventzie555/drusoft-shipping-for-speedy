@@ -47,7 +47,7 @@ class Speedy_Modern_Order_Metabox {
 
 		add_meta_box(
 			'speedy-modern-shipment',
-			__( 'Speedy Shipment', 'speedy-modern-shipping' ),
+			__( 'Speedy Shipment', 'modern-shipping-for-speedy' ),
 			[ __CLASS__, 'render' ],
 			$screen,
 			'side',
@@ -109,7 +109,7 @@ class Speedy_Modern_Order_Metabox {
 	public static function render(): void {
 		$order = self::get_current_order();
 		if ( ! $order ) {
-			echo '<p>' . esc_html__( 'Order not found.', 'speedy-modern-shipping' ) . '</p>';
+			echo '<p>' . esc_html__( 'Order not found.', 'modern-shipping-for-speedy' ) . '</p>';
 			return;
 		}
 
@@ -127,34 +127,34 @@ class Speedy_Modern_Order_Metabox {
 				'speedy_print_waybill'
 			);
 
-			echo '<p><strong>' . esc_html__( 'Waybill:', 'speedy-modern-shipping' ) . '</strong> ';
+			echo '<p><strong>' . esc_html__( 'Waybill:', 'modern-shipping-for-speedy' ) . '</strong> ';
 			echo '<a href="' . esc_url( $track_url ) . '" target="_blank">' . esc_html( $waybill_id ) . '</a></p>';
 
 			echo '<div class="speedy-metabox-actions" style="display: flex; flex-direction: column; gap: 6px;">';
 
 			// Print
 			echo '<a href="' . esc_url( $print_url ) . '" target="_blank" class="button" style="text-align:center;">'
-			     . esc_html__( 'Print Waybill', 'speedy-modern-shipping' ) . '</a>';
+			     . esc_html__( 'Print Waybill', 'modern-shipping-for-speedy' ) . '</a>';
 
 			// Request Courier
 			if ( $courier_requested ) {
 				echo '<span class="button disabled" style="text-align:center; color: green;">'
-				     . esc_html__( 'Courier Requested', 'speedy-modern-shipping' ) . '</span>';
+				     . esc_html__( 'Courier Requested', 'modern-shipping-for-speedy' ) . '</span>';
 			} else {
 				echo '<button type="button" class="button speedy-order-request-courier" data-order-id="' . esc_attr( $order_id ) . '">'
-				     . esc_html__( 'Request Courier', 'speedy-modern-shipping' ) . '</button>';
+				     . esc_html__( 'Request Courier', 'modern-shipping-for-speedy' ) . '</button>';
 			}
 
 			// Cancel
 			echo '<button type="button" class="button speedy-order-cancel" data-order-id="' . esc_attr( $order_id ) . '" style="color: #a00;">'
-			     . esc_html__( 'Cancel Shipment', 'speedy-modern-shipping' ) . '</button>';
+			     . esc_html__( 'Cancel Shipment', 'modern-shipping-for-speedy' ) . '</button>';
 
 			echo '</div>';
 		} else {
 			// No waybill — show generate button
-			echo '<p>' . esc_html__( 'No waybill generated yet.', 'speedy-modern-shipping' ) . '</p>';
+			echo '<p>' . esc_html__( 'No waybill generated yet.', 'modern-shipping-for-speedy' ) . '</p>';
 			echo '<button type="button" class="button button-primary speedy-order-generate" data-order-id="' . esc_attr( $order_id ) . '">'
-			     . esc_html__( 'Generate Waybill', 'speedy-modern-shipping' ) . '</button>';
+			     . esc_html__( 'Generate Waybill', 'modern-shipping-for-speedy' ) . '</button>';
 		}
 
 		echo '</div>';
@@ -182,11 +182,11 @@ class Speedy_Modern_Order_Metabox {
 			'ajax_url' => admin_url( 'admin-ajax.php' ),
 			'nonce'    => wp_create_nonce( 'speedy_modern_actions' ),
 			'i18n'     => [
-				'confirm_cancel'    => __( 'Are you sure you want to cancel this shipment?', 'speedy-modern-shipping' ),
-				'generating'        => __( 'Generating...', 'speedy-modern-shipping' ),
-				'requesting'        => __( 'Requesting...', 'speedy-modern-shipping' ),
-				'courier_requested' => __( 'Courier Requested', 'speedy-modern-shipping' ),
-				'cancelling'        => __( 'Cancelling...', 'speedy-modern-shipping' ),
+				'confirm_cancel'    => __( 'Are you sure you want to cancel this shipment?', 'modern-shipping-for-speedy' ),
+				'generating'        => __( 'Generating...', 'modern-shipping-for-speedy' ),
+				'requesting'        => __( 'Requesting...', 'modern-shipping-for-speedy' ),
+				'courier_requested' => __( 'Courier Requested', 'modern-shipping-for-speedy' ),
+				'cancelling'        => __( 'Cancelling...', 'modern-shipping-for-speedy' ),
 			],
 		] );
 	}

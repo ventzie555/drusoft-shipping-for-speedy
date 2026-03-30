@@ -51,7 +51,7 @@ class Speedy_Modern_Syncer {
 		if ( empty( $username ) || empty( $password ) ) {
 			// Log error: Credentials missing
 			if ( class_exists( 'WC_Logger' ) ) {
-				wc_get_logger()->error( __( 'Speedy Sync Failed: Missing credentials.', 'speedy-modern-shipping' ), array( 'source' => 'speedy-modern-shipping' ) );
+				wc_get_logger()->error( __( 'Speedy Sync Failed: Missing credentials.', 'modern-shipping-for-speedy' ), array( 'source' => 'modern-shipping-for-speedy' ) );
 			}
 			return;
 		}
@@ -83,7 +83,7 @@ class Speedy_Modern_Syncer {
 
 		if ( is_wp_error( $response ) ) {
 			if ( class_exists( 'WC_Logger' ) ) {
-				wc_get_logger()->error( __( 'Speedy Cities Sync Error: ', 'speedy-modern-shipping' ) . $response->get_error_message(), array( 'source' => 'speedy-modern-shipping' ) );
+				wc_get_logger()->error( __( 'Speedy Cities Sync Error: ', 'modern-shipping-for-speedy' ) . $response->get_error_message(), array( 'source' => 'modern-shipping-for-speedy' ) );
 			}
 			return;
 		}
@@ -133,7 +133,7 @@ class Speedy_Modern_Syncer {
 		}
 
 		if ( class_exists( 'WC_Logger' ) ) {
-			wc_get_logger()->info( __( 'Speedy Cities Sync Completed. Count: ', 'speedy-modern-shipping' ) . $count, array( 'source' => 'speedy-modern-shipping' ) );
+			wc_get_logger()->info( __( 'Speedy Cities Sync Completed. Count: ', 'modern-shipping-for-speedy' ) . $count, array( 'source' => 'modern-shipping-for-speedy' ) );
 		}
 	}
 
@@ -158,7 +158,7 @@ class Speedy_Modern_Syncer {
 
 		if ( is_wp_error( $response ) ) {
 			if ( class_exists( 'WC_Logger' ) ) {
-				wc_get_logger()->error( __( 'Speedy Offices Sync Error: ', 'speedy-modern-shipping' ) . $response->get_error_message(), array( 'source' => 'speedy-modern-shipping' ) );
+				wc_get_logger()->error( __( 'Speedy Offices Sync Error: ', 'modern-shipping-for-speedy' ) . $response->get_error_message(), array( 'source' => 'modern-shipping-for-speedy' ) );
 			}
 			return;
 		}
@@ -194,7 +194,7 @@ class Speedy_Modern_Syncer {
 			}
 
 			if ( class_exists( 'WC_Logger' ) ) {
-				wc_get_logger()->info( __( 'Speedy Offices Sync Completed. Count: ', 'speedy-modern-shipping' ) . count($data['offices']), array( 'source' => 'speedy-modern-shipping' ) );
+				wc_get_logger()->info( __( 'Speedy Offices Sync Completed. Count: ', 'modern-shipping-for-speedy' ) . count($data['offices']), array( 'source' => 'modern-shipping-for-speedy' ) );
 			}
 		}
 	}

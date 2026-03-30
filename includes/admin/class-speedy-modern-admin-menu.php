@@ -14,8 +14,8 @@ class Speedy_Modern_Admin_Menu {
 	public static function add_menu_page(): void {
 		add_submenu_page(
 			'woocommerce',
-			__( 'Speedy Orders', 'speedy-modern-shipping' ),
-			__( 'Speedy Orders', 'speedy-modern-shipping' ),
+			__( 'Speedy Orders', 'modern-shipping-for-speedy' ),
+			__( 'Speedy Orders', 'modern-shipping-for-speedy' ),
 			'manage_woocommerce',
 			'speedy-modern-orders',
 			[ __CLASS__, 'render_page' ]
@@ -39,12 +39,12 @@ class Speedy_Modern_Admin_Menu {
 			'ajax_url' => admin_url( 'admin-ajax.php' ),
 			'nonce'    => wp_create_nonce( 'speedy_modern_actions' ),
 			'i18n'     => [
-				'confirm_cancel'  => __( 'Are you sure you want to cancel this shipment?', 'speedy-modern-shipping' ),
-				'requesting'      => __( 'Requesting...', 'speedy-modern-shipping' ),
-				'requested'       => __( 'Requested', 'speedy-modern-shipping' ),
-				'request_courier' => __( 'Request Courier', 'speedy-modern-shipping' ),
-				'generating'      => __( 'Generating...', 'speedy-modern-shipping' ),
-				'generate'        => __( 'Generate', 'speedy-modern-shipping' ),
+				'confirm_cancel'  => __( 'Are you sure you want to cancel this shipment?', 'modern-shipping-for-speedy' ),
+				'requesting'      => __( 'Requesting...', 'modern-shipping-for-speedy' ),
+				'requested'       => __( 'Requested', 'modern-shipping-for-speedy' ),
+				'request_courier' => __( 'Request Courier', 'modern-shipping-for-speedy' ),
+				'generating'      => __( 'Generating...', 'modern-shipping-for-speedy' ),
+				'generate'        => __( 'Generate', 'modern-shipping-for-speedy' ),
 			],
 		] );
 	}
@@ -56,7 +56,7 @@ class Speedy_Modern_Admin_Menu {
 		$table->prepare_items();
 
 		echo '<div class="wrap">';
-		echo '<h1 class="wp-heading-inline">' . esc_html__( 'Speedy Orders', 'speedy-modern-shipping' ) . '</h1>';
+		echo '<h1 class="wp-heading-inline">' . esc_html__( 'Speedy Orders', 'modern-shipping-for-speedy' ) . '</h1>';
 		echo '<form method="post">';
 		$table->display();
 		echo '</form>';
