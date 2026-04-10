@@ -1,9 +1,9 @@
 === Drusoft Shipping for Speedy ===
-Contributors: drusoftltd, ventzie
+Contributors: ventzie
 Tags: woocommerce, shipping, speedy, bulgaria, delivery
 Requires at least: 6.0
 Tested up to: 6.9
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -38,8 +38,8 @@ This plugin is currently **not compatible** with the WooCommerce Block Cart and 
 == Installation ==
 
 1. Upload the `drusoft-shipping-for-speedy` folder to the `/wp-content/plugins/` directory.
-2. Activate the plugin through the **Plugins** menu in WordPress.
-3. Ensure **WooCommerce** is installed and active.
+2. Ensure **WooCommerce** is installed and active.
+3. Activate the plugin through the **Plugins** menu in WordPress.
 4. Navigate to **WooCommerce > Settings > Shipping > Shipping Zones**.
 5. Add or edit a shipping zone (e.g., "Bulgaria").
 6. Click **Add shipping method** and select **Drusoft Shipping for Speedy**.
@@ -147,6 +147,12 @@ The plugin minimizes API calls through several strategies:
 
 == Changelog ==
 
+= 1.0.1 =
+* Added a WordPress Playground blueprint for plugin page Live Preview with WooCommerce preinstalled.
+* Declared WooCommerce as a required plugin and updated installation instructions accordingly.
+* Improved WordPress.org compatibility, including plugin metadata, text domain alignment, and compliance fixes.
+* Fixed shipping recalculation when switching payment methods during checkout.
+
 = 1.0.0 =
 * Initial release.
 * Full Speedy API integration for shipping calculation and waybill generation.
@@ -161,6 +167,9 @@ The plugin minimizes API calls through several strategies:
 * Bulgarian (bg_BG) translation included.
 
 == Upgrade Notice ==
+
+= 1.0.1 =
+Recommended update with WordPress.org compatibility improvements, WooCommerce dependency metadata, Playground Live Preview support, and checkout recalculation fixes.
 
 = 1.0.0 =
 Initial release.

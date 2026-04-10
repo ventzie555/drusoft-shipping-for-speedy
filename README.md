@@ -38,11 +38,12 @@ A high-performance, conflict-free **WooCommerce shipping plugin** for [Speedy](h
 
 1. Download the [latest release](https://github.com/ventzie555/drusoft-shipping-for-speedy/releases) or clone this repo
 2. Upload the `drusoft-shipping-for-speedy` folder to `/wp-content/plugins/`
-3. Activate the plugin in **Plugins → Installed Plugins**
-4. Go to **WooCommerce → Settings → Shipping → Shipping Zones**
-5. Add/edit a zone (e.g. "Bulgaria") → **Add shipping method** → select **Drusoft Shipping for Speedy**
-6. Enter your **Speedy API credentials** and click **Save Changes**
-7. Background sync of cities and offices starts automatically
+3. Ensure **WooCommerce** is installed and active.
+4. Activate the plugin in **Plugins → Installed Plugins**
+5. Go to **WooCommerce → Settings → Shipping → Shipping Zones**
+6. Add/edit a zone (e.g. "Bulgaria") → **Add shipping method** → select **Drusoft Shipping for Speedy**
+7. Enter your **Speedy API credentials** and click **Save Changes**
+8. Background sync of cities and offices starts automatically
 
 ### Requirements
 
