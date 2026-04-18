@@ -44,8 +44,9 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 			$this->init_form_fields();
 			$this->init_settings();
 
-			// Define user-set variables
-			$this->title = $this->get_option( 'title', __( 'Speedy Delivery', 'drusoft-shipping-for-speedy' ) );
+			// Define user-set variables from instance settings
+			$this->enabled = $this->get_instance_option( 'enabled', 'yes' );
+			$this->title = $this->get_instance_option( 'title', __( 'Speedy Delivery', 'drusoft-shipping-for-speedy' ) );
 
 			// Save settings in admin
 			add_action( 'woocommerce_update_options_shipping_' . $this->id, array( $this, 'process_admin_options' ) );

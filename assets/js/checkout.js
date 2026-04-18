@@ -136,7 +136,8 @@
 
             updateContext();
 
-            const selectedMethod = $('input[name^="shipping_method"]:checked').val();
+            // When only one method exists, WC renders a hidden input (no :checked).
+            const selectedMethod = $('input[name^="shipping_method"][type="radio"]:checked, input[name^="shipping_method"][type="hidden"]').first().val();
             const speedySelected = selectedMethod && selectedMethod.indexOf(speedyMethodId) !== -1;
 
             if (!speedySelected) {

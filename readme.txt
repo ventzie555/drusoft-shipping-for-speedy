@@ -3,7 +3,7 @@ Contributors: ventzie
 Tags: woocommerce, shipping, speedy, bulgaria, delivery
 Requires at least: 6.0
 Tested up to: 6.9
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -147,6 +147,10 @@ The plugin minimizes API calls through several strategies:
 
 == Changelog ==
 
+= 1.0.2 =
+* Fixed: Shipping method not initializing when it is the only method in a shipping zone (WooCommerce renders a hidden input instead of radio buttons for single methods).
+* Fixed: Shipping method enabled/disabled toggle and custom title now correctly read from instance settings instead of empty global settings.
+
 = 1.0.1 =
 * Added a WordPress Playground blueprint for plugin page Live Preview with WooCommerce preinstalled.
 * Declared WooCommerce as a required plugin and updated installation instructions accordingly.
@@ -167,6 +171,9 @@ The plugin minimizes API calls through several strategies:
 * Bulgarian (bg_BG) translation included.
 
 == Upgrade Notice ==
+
+= 1.0.2 =
+Important fix: Shipping rates were not displayed when Drusoft Shipping for Speedy was the only shipping method in a zone. Also fixes the enable/disable toggle and custom method title not being respected.
 
 = 1.0.1 =
 Recommended update with WordPress.org compatibility improvements, WooCommerce dependency metadata, Playground Live Preview support, and checkout recalculation fixes.

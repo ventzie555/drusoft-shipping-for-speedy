@@ -123,8 +123,12 @@
      * Re-render the Speedy selector and, if we already loaded cities for
      * the current state, rebuild the city dropdown without a new AJAX call.
      */
+    function getSelectedShippingMethod() {
+        return $('input[name^="shipping_method"][type="radio"]:checked, input[name^="shipping_method"][type="hidden"]').first();
+    }
+
     function restoreSpeedyUI() {
-        const $selectedMethod = $('input[name^="shipping_method"]:checked');
+        const $selectedMethod = getSelectedShippingMethod();
         const isSpeedy = $selectedMethod.val() && $selectedMethod.val().indexOf(params.method_id) === 0;
 
         isSpeedyActive = isSpeedy;
@@ -174,7 +178,7 @@
     /* ─── Main entry on first load ────────────────────────── */
 
     function handleSpeedyCart() {
-        const $selectedMethod = $('input[name^="shipping_method"]:checked');
+        const $selectedMethod = getSelectedShippingMethod();
         const isSpeedy = $selectedMethod.val() && $selectedMethod.val().indexOf(params.method_id) === 0;
 
         isSpeedyActive = isSpeedy;
