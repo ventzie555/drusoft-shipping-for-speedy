@@ -3,7 +3,7 @@
  * Plugin Name: Drusoft Shipping for Speedy
  * Plugin URI:  https://github.com/ventzie555/drusoft-shipping-for-speedy
  * Description: A clean, conflict-free Speedy integration for Bulgaria.
- * Version:     1.0.2
+ * Version:     1.0.3
  * Author:      DRUSOFT LTD
  * Author URI:  https://drusoft.dev/
  * Text Domain: drusoft-shipping-for-speedy
@@ -55,7 +55,7 @@ if ( ! in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins',
  */
 define( 'DRUSHFO_PATH', plugin_dir_path( __FILE__ ) );
 define( 'DRUSHFO_URL',  plugin_dir_url( __FILE__ ) );
-define( 'DRUSHFO_VER',  '1.0.2' );
+define( 'DRUSHFO_VER',  '1.0.3' );
 
 /**
  * Load Dependencies
@@ -429,7 +429,7 @@ function drushfo_enqueue_scripts(): void {
 		wp_enqueue_script(
 			'drushfo-cart',
 			DRUSHFO_URL . 'assets/js/cart.js',
-			array( 'jquery', 'select2', 'drushfo-common' ),
+			array( 'jquery', 'select2', 'drushfo-common', 'wc-cart' ),
 			DRUSHFO_VER,
 			true
 		);

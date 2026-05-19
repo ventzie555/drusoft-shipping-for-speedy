@@ -184,6 +184,11 @@
         isSpeedyActive = isSpeedy;
 
         if (isSpeedy) {
+            // WC core cart script hides the calculator on ready.
+            // Defer our .show() so it runs after WC initialization.
+            setTimeout(function () {
+                $('.shipping-calculator-form').show();
+            }, 0);
             renderSpeedySelector($selectedMethod.closest('li'));
 
             // Init state as searchable select2 with transliteration
