@@ -1124,6 +1124,20 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 		 * to the configured pricing method (free, fixed, file, calculator, surcharge).
 		 */
 		public function calculate_shipping( $package = array() ): void {
+			if ( $this->request_selects_other_shipping_method() ) {
+				if ( function_exists( 'drushfo_clear_speedy_checkout_session' ) ) {
+					drushfo_clear_speedy_checkout_session();
+				}
+
+				$this->add_rate( [
+					'id'        => $this->get_rate_id(),
+					'label'     => $this->title,
+					'cost'      => 0,
+					'meta_data' => [ 'missing_address' => true ],
+				] );
+				return;
+			}
+
 			$username = $this->get_option( 'speedy_username' );
 			$password = $this->get_option( 'speedy_password' );
 
@@ -1572,6 +1586,42 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 				'city_id'        => $city_id,
 				'payment_method' => sanitize_text_field( $merged['payment_method'] ?? '' ),
 			];
+		}
+
+		/**
+		 * Check whether the current checkout request explicitly selected a non-Speedy method.
+		 *
+		 * @return bool True when shipping_method is present and none of its values are Speedy.
+		 */
+		private function request_selects_other_shipping_method(): bool {
+			$data = [];
+
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- post_data is a URL-encoded checkout payload; values are sanitized below.
+			if ( ! empty( $_POST['post_data'] ) ) {
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+				parse_str( wp_unslash( $_POST['post_data'] ), $data );
+			}
+
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$merged = array_merge( $data, $_POST );
+			$methods = $merged['shipping_method'] ?? [];
+
+			if ( ! is_array( $methods ) ) {
+				$methods = [ $methods ];
+			}
+
+			$methods = array_filter( array_map( 'sanitize_text_field', $methods ) );
+			if ( empty( $methods ) ) {
+				return false;
+			}
+
+			foreach ( $methods as $method_id ) {
+				if ( str_starts_with( $method_id, $this->id ) ) {
+					return false;
+				}
+			}
+
+			return true;
 		}
 
 		/* ───────────────────────────────────────────────────

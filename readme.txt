@@ -2,9 +2,9 @@
 Contributors: ventzie
 Tags: woocommerce, shipping, speedy, bulgaria, delivery
 Requires at least: 6.0
-Tested up to: 6.9
-Stable tag: 1.0.3
-Requires PHP: 7.4
+Tested up to: 7.0
+Stable tag: 1.0.4
+Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -147,6 +147,12 @@ The plugin minimizes API calls through several strategies:
 
 == Changelog ==
 
+= 1.0.4 =
+* Compatibility: bumped minimum PHP from 7.4 to 8.0 (7.4 has been end-of-life since November 2022). Tested up to WordPress 7.0.
+* Fixed: stale Speedy price persisted in the cart total after the customer switched to a different shipping method during checkout. New `drushfo_clear_speedy_when_unselected` hook + `calculate_shipping` short-circuit clear the Speedy session keys and invalidate the package-rate cache when Speedy is no longer selected.
+* Fixed: shipping price now re-quotes when the customer toggles between Cash on Delivery and a non-COD payment method on checkout (COD adds a handling fee). The package hash already varied by payment_method server-side; the missing piece was a JS trigger to fire `update_checkout` on `payment_method` change.
+* Improved: late `drushfo_get_services` AJAX responses no longer re-inject the Speedy service-tier radios into the order review after the customer switched to a non-Speedy method.
+
 = 1.0.3 =
 * Fixed: On cart page, when Speedy is preselected as the default shipping method, the shipping calculator is now opened automatically.
 * Improved: Prevented race with WooCommerce core cart script hiding the calculator on initial load.
@@ -175,6 +181,9 @@ The plugin minimizes API calls through several strategies:
 * Bulgarian (bg_BG) translation included.
 
 == Upgrade Notice ==
+
+= 1.0.4 =
+Recommended update. Fixes stale shipping price after switching shipping methods and missing COD re-quote on payment-method change. Minimum PHP version is now 8.0 (PHP 7.4 has been end-of-life since November 2022).
 
 = 1.0.3 =
 Recommended update: fixes cart address form visibility when Speedy is preselected as the default shipping method.

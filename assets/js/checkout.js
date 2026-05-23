@@ -136,9 +136,7 @@
 
             updateContext();
 
-            // When only one method exists, WC renders a hidden input (no :checked).
-            const selectedMethod = $('input[name^="shipping_method"][type="radio"]:checked, input[name^="shipping_method"][type="hidden"]').first().val();
-            const speedySelected = selectedMethod && selectedMethod.indexOf(speedyMethodId) !== -1;
+            const speedySelected = isSpeedySelected();
 
             if (!speedySelected) {
                 if (!isSpeedyActive) {
@@ -177,6 +175,18 @@
         });
 
         // Listen for "Ship to different address" toggle
+        // Payment-method change → re-quote. Speedy's calculate_shipping reads
+        // payment_method from POST and toggles COD additional services on the
+        // API call, and the package hash already varies by payment_method, but
+        // WC doesn't trigger update_checkout on its own when the payment radio
+        // changes — we have to. Delegated on body so it survives WC's payment-
+        // block re-renders.
+        $(document.body).on('change', 'input[name="payment_method"]', function() {
+            if (isSpeedyActive) {
+                $(document.body).trigger('update_checkout');
+            }
+        });
+
         $('form.checkout').on('change', '#ship-to-different-address-checkbox', function() {
             // If Speedy is active, we need to switch contexts
             if (isSpeedyActive) {
@@ -199,6 +209,12 @@
             } else {
                 currentContext = 'billing';
             }
+        }
+
+        function isSpeedySelected() {
+            // When only one method exists, WC renders a hidden input (no :checked).
+            const selectedMethod = $('input[name^="shipping_method"][type="radio"]:checked, input[name^="shipping_method"][type="hidden"]').first().val();
+            return !!(selectedMethod && selectedMethod.indexOf(speedyMethodId) !== -1);
         }
 
         // Initial check on page load
@@ -911,6 +927,11 @@
                 data: { action: 'drushfo_get_services', nonce: params.nonce },
                 success: function(response) {
                     $('#speedy-service-field').remove();
+
+                    // A checkout refresh can finish after the customer has already
+                    // selected another shipping method. Do not re-insert Speedy
+                    // service prices unless Speedy is still active and selected.
+                    if (!isSpeedyActive || !isSpeedySelected()) return;
 
                     if (!response.success) return;
 

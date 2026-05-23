@@ -3,14 +3,14 @@
  * Plugin Name: Drusoft Shipping for Speedy
  * Plugin URI:  https://github.com/ventzie555/drusoft-shipping-for-speedy
  * Description: A clean, conflict-free Speedy integration for Bulgaria.
- * Version:     1.0.3
+ * Version:     1.0.4
  * Author:      DRUSOFT LTD
  * Author URI:  https://drusoft.dev/
  * Text Domain: drusoft-shipping-for-speedy
  * Domain Path: /languages
  * Requires at least: 6.0
- * Tested up to: 6.9
- * Requires PHP: 7.4
+ * Tested up to: 7.0
+ * Requires PHP: 8.0
  * Requires Plugins: woocommerce
  * WC requires at least: 8.0
  * WC tested up to: 9.8
@@ -55,7 +55,7 @@ if ( ! in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins',
  */
 define( 'DRUSHFO_PATH', plugin_dir_path( __FILE__ ) );
 define( 'DRUSHFO_URL',  plugin_dir_url( __FILE__ ) );
-define( 'DRUSHFO_VER',  '1.0.3' );
+define( 'DRUSHFO_VER',  '1.0.4' );
 
 /**
  * Load Dependencies
@@ -322,6 +322,68 @@ function drushfo_vary_package_hash( $packages ) {
 	}
 
 	return $packages;
+}
+
+/**
+ * Clear cached Speedy price/session data when checkout switches away from Speedy.
+ *
+ * WooCommerce can reuse cached package rates when only the selected shipping
+ * method changes. If the previous Speedy calculation stays in the session, the
+ * stale Speedy price can remain visible after another method is selected.
+ */
+add_action( 'woocommerce_checkout_update_order_review', 'drushfo_clear_speedy_when_unselected', 1 );
+function drushfo_clear_speedy_when_unselected( $post_data = '' ): void {
+	parse_str( wp_unslash( (string) $post_data ), $data );
+
+	$shipping_methods = $data['shipping_method'] ?? [];
+	if ( ! is_array( $shipping_methods ) ) {
+		$shipping_methods = [ $shipping_methods ];
+	}
+
+	$shipping_methods = array_filter( array_map( 'sanitize_text_field', $shipping_methods ) );
+	if ( empty( $shipping_methods ) ) {
+		return;
+	}
+
+	foreach ( $shipping_methods as $method_id ) {
+		if ( str_starts_with( $method_id, 'drushfo_speedy' ) ) {
+			return;
+		}
+	}
+
+	drushfo_clear_speedy_checkout_session();
+	if ( ! WC()->session ) {
+		return;
+	}
+
+	// Force WooCommerce to rebuild package rates without the stale Speedy cost.
+	$packages = WC()->cart ? WC()->cart->get_shipping_packages() : [];
+	foreach ( $packages as $key => $package ) {
+		WC()->session->set( 'shipping_for_package_' . $key, false );
+	}
+}
+
+/**
+ * Reset only Speedy's calculated price/waybill data, preserving customer address.
+ */
+function drushfo_clear_speedy_checkout_session(): void {
+	if ( ! WC()->session ) {
+		return;
+	}
+
+	$service_options = WC()->session->get( 'drushfo_service_options', [] );
+	if ( is_array( $service_options ) ) {
+		foreach ( array_keys( $service_options ) as $service_id ) {
+			WC()->session->set( 'drushfo_shipping_data_' . absint( $service_id ), null );
+		}
+	}
+
+	WC()->session->set( 'drushfo_service_options', [] );
+	WC()->session->set( 'drushfo_selected_service', 0 );
+	WC()->session->set( 'drushfo_shipping_cost', 0 );
+	WC()->session->set( 'drushfo_shipping_data', null );
+	WC()->session->set( 'drushfo_delivery_type', 'address' );
+	WC()->session->set( 'drushfo_office_id', 0 );
 }
 
 /**
