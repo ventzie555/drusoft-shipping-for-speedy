@@ -35,6 +35,10 @@ This plugin is currently **not compatible** with the WooCommerce Block Cart and 
 * **Advanced Order Management** — Dedicated metabox in the order edit screen, integrated waybill generation, and bulk actions for managing multiple Speedy orders.
 * **Clean Codebase** — Built with modern PHP standards and conflict-free architecture.
 
+= Also Ship via Econt? =
+
+This plugin has a sibling for the **Econt** courier: [Drusoft Shipping for Econt](https://wordpress.org/plugins/drusoft-shipping-for-econt/). Both plugins share the same checkout UI, settings layout, and admin order-management screens — once you've learned one, the other feels familiar. Install both if your store supports delivery via either courier.
+
 == Installation ==
 
 1. Upload the `drusoft-shipping-for-speedy` folder to the `/wp-content/plugins/` directory.

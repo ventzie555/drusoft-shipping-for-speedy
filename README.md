@@ -34,6 +34,14 @@ A high-performance, conflict-free **WooCommerce shipping plugin** for [Speedy](h
 
 ---
 
+## 🤝 Sibling Plugin — Also Ship via Econt?
+
+This plugin has a sibling for the **Econt** courier: **[Drusoft Shipping for Econt](https://wordpress.org/plugins/drusoft-shipping-for-econt/)**.
+
+Both plugins share the same checkout UI, settings layout, and admin order-management screens — once you've learned one, the other feels familiar. Install both if your store supports delivery via either courier.
+
+---
+
 ## 📦 Installation
 
 1. Download the [latest release](https://github.com/ventzie555/drusoft-shipping-for-speedy/releases) or clone this repo
@@ -162,6 +170,12 @@ For support or custom feature requests, contact [DRUSOFT LTD](https://drusoft.de
 - 🎁 **Прагове за безплатна доставка** по тип доставка
 - ✅ **Валидация на API данни** в реално време
 - 🇧🇬 **Включен български превод**
+
+## 🤝 Сестрински плъгин — изпращате и с Иконт?
+
+Този плъгин има сестрински плъгин за куриер **Иконт**: **[Drusoft Shipping for Econt](https://wordpress.org/plugins/drusoft-shipping-for-econt/)**.
+
+Двата плъгина споделят един и същ потребителски интерфейс при поръчка, разположение на настройките и админ изгледи за управление на поръчки — щом сте свикнали с единия, другият ще ви е познат. Инсталирайте и двата, ако магазинът ви поддържа доставка чрез който и да е от двата куриера.
 
 ## 📦 Инсталация
 
