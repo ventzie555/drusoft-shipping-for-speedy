@@ -440,6 +440,7 @@ function drushfo_enqueue_scripts(): void {
 		'current_office_id'  => $current_office,
 		'currency_symbol'    => get_woocommerce_currency_symbol(),
 		'i18n'            => array(
+			'delivery_method'  => __( 'Delivery Method', 'drusoft-shipping-for-speedy' ),
 			'to_address'       => __( 'To Address', 'drusoft-shipping-for-speedy' ),
 			'to_office'        => __( 'To Office', 'drusoft-shipping-for-speedy' ),
 			'to_automat'       => __( 'To Automat', 'drusoft-shipping-for-speedy' ),

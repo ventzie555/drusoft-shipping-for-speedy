@@ -13,6 +13,9 @@ msgstr ""
 "X-Generator: Poedit 3.0\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "Delivery Method"
+msgstr "Начин на доставка"
+
 msgid "To Address"
 msgstr "До адрес"
 
