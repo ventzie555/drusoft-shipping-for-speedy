@@ -3,7 +3,7 @@ Contributors: ventzie
 Tags: woocommerce, shipping, speedy, bulgaria, delivery
 Requires at least: 6.0
 Tested up to: 7.0
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -151,6 +151,13 @@ The plugin minimizes API calls through several strategies:
 
 == Changelog ==
 
+= 1.0.5 =
+* Fixed: when both Drusoft Shipping for Speedy and Drusoft Shipping for Econt are active, switching couriers during checkout could leave the newly selected courier's office/map picker uninitialised. Both plugins tagged their city dropdown with the same generic Select2 class; each now marks its own.
+* Fixed: each courier keeps its own delivery selection (province, city, office, delivery type, postcode). A value entered under one courier no longer carries over to the other through the shared address fields.
+* Fixed: changing the province after the city/office were already chosen now clears them and reloads the cities for the new province (the province-change handler is bound directly on the field so it survives Select2 re-initialisation).
+* Improved: switching back to Speedy no longer briefly shows an intermediate price — the order review is greyed while it re-quotes.
+* i18n: the "Delivery Method" field label is now translatable.
+
 = 1.0.4 =
 * Compatibility: bumped minimum PHP from 7.4 to 8.0 (7.4 has been end-of-life since November 2022). Tested up to WordPress 7.0.
 * Fixed: stale Speedy price persisted in the cart total after the customer switched to a different shipping method during checkout. New `drushfo_clear_speedy_when_unselected` hook + `calculate_shipping` short-circuit clear the Speedy session keys and invalidate the package-rate cache when Speedy is no longer selected.
@@ -185,6 +192,9 @@ The plugin minimizes API calls through several strategies:
 * Bulgarian (bg_BG) translation included.
 
 == Upgrade Notice ==
+
+= 1.0.5 =
+Recommended update. Fixes courier-switch issues when used alongside Drusoft Shipping for Econt, keeps each courier's checkout selection separate, and reloads cities correctly when the province is changed.
 
 = 1.0.4 =
 Recommended update. Fixes stale shipping price after switching shipping methods and missing COD re-quote on payment-method change. Minimum PHP version is now 8.0 (PHP 7.4 has been end-of-life since November 2022).
