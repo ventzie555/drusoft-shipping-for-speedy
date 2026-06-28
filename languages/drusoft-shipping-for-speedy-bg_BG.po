@@ -514,3 +514,9 @@ msgstr "Анулирай"
 msgid "Unknown API error"
 msgstr "Неизвестна API грешка"
 
+msgid "Speedy office"
+msgstr "Офис на Спиди"
+
+msgid "Office not found in local database — please sync offices."
+msgstr "Офисът не е намерен в локалната база — моля, синхронизирайте офисите."
+

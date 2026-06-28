@@ -3,7 +3,7 @@
  * Plugin Name: Drusoft Shipping for Speedy
  * Plugin URI:  https://github.com/ventzie555/drusoft-shipping-for-speedy
  * Description: A clean, conflict-free Speedy integration for Bulgaria.
- * Version:     1.0.5
+ * Version:     1.0.6
  * Author:      DRUSOFT LTD
  * Author URI:  https://drusoft.dev/
  * Text Domain: drusoft-shipping-for-speedy
@@ -55,7 +55,7 @@ if ( ! in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins',
  */
 define( 'DRUSHFO_PATH', plugin_dir_path( __FILE__ ) );
 define( 'DRUSHFO_URL',  plugin_dir_url( __FILE__ ) );
-define( 'DRUSHFO_VER',  '1.0.5' );
+define( 'DRUSHFO_VER',  '1.0.6' );
 
 /**
  * Load Dependencies
@@ -654,6 +654,47 @@ function drushfo_get_office_label_by_id( int $office_id ): int|string {
 	}
 
 	return $office_id;
+}
+
+/**
+ * Show the chosen Speedy office (name + address) on the admin order screen.
+ *
+ * The selected office is stored only as a numeric ID (_drushfo_office_id), so
+ * without this the merchant has to generate a waybill to see which office the
+ * customer picked. Here we resolve the ID against the local offices table and
+ * print a readable line in the order's shipping-address column. Resolved at
+ * display time, so it also works for orders placed before this version.
+ *
+ * @param WC_Order $order The order being viewed.
+ */
+add_action( 'woocommerce_admin_order_data_after_shipping_address', 'drushfo_admin_show_office' );
+function drushfo_admin_show_office( $order ): void {
+	if ( ! is_a( $order, 'WC_Order' ) ) {
+		return;
+	}
+
+	$office_id = (int) $order->get_meta( '_drushfo_office_id' );
+	if ( ! $office_id ) {
+		return; // delivery to address, not an office
+	}
+
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$office = $wpdb->get_row(
+		$wpdb->prepare(
+			"SELECT name, address FROM {$wpdb->prefix}drushfo_offices WHERE id = %d",
+			$office_id
+		)
+	);
+
+	$value = $office
+		? sprintf( '%s — %s', $office->name, $office->address )
+		: __( 'Office not found in local database — please sync offices.', 'drusoft-shipping-for-speedy' );
+
+	echo '<p class="form-field form-field-wide"><strong>' .
+		esc_html__( 'Speedy office', 'drusoft-shipping-for-speedy' ) . ':</strong><br>' .
+		esc_html( $value ) .
+		' <span style="color:#888">(#' . esc_html( (string) $office_id ) . ')</span></p>';
 }
 
 /**

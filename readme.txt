@@ -3,7 +3,7 @@ Contributors: ventzie
 Tags: woocommerce, shipping, speedy, bulgaria, delivery
 Requires at least: 6.0
 Tested up to: 7.0
-Stable tag: 1.0.5
+Stable tag: 1.0.6
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -150,6 +150,9 @@ The plugin minimizes API calls through several strategies:
 * **Session storage** — Cart selections (city, delivery type, office) are stored in the WooCommerce session, so shipping calculations reuse the customer's choices without extra lookups.
 
 == Changelog ==
+
+= 1.0.6 =
+* Improved: the selected Speedy office (name and address) is now shown directly on the WooCommerce order screen, in the shipping-address column. Previously only the internal office ID was stored, so merchants had to generate a waybill to see which office the customer chose. Resolved at display time, so it also applies to orders placed before this version.
 
 = 1.0.5 =
 * Fixed: when both Drusoft Shipping for Speedy and Drusoft Shipping for Econt are active, switching couriers during checkout could leave the newly selected courier's office/map picker uninitialised. Both plugins tagged their city dropdown with the same generic Select2 class; each now marks its own.
