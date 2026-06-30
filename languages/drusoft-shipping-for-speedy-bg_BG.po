@@ -520,3 +520,18 @@ msgstr "Офис на Спиди"
 msgid "Office not found in local database — please sync offices."
 msgstr "Офисът не е намерен в локалната база — моля, синхронизирайте офисите."
 
+msgid "Speedy automat"
+msgstr "Автомат на Спиди"
+
+msgid "Parcel tracking"
+msgstr "Проследяване на пратката"
+
+msgid "Waybill number"
+msgstr "Номер на товарителница"
+
+msgid "Track your parcel with Speedy"
+msgstr "Проследи пратката при Спиди"
+
+msgid "Speedy"
+msgstr "Спиди"
+

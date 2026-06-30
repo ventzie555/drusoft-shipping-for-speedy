@@ -3,7 +3,7 @@
  * Plugin Name: Drusoft Shipping for Speedy
  * Plugin URI:  https://github.com/ventzie555/drusoft-shipping-for-speedy
  * Description: A clean, conflict-free Speedy integration for Bulgaria.
- * Version:     1.0.6
+ * Version:     1.0.7
  * Author:      DRUSOFT LTD
  * Author URI:  https://drusoft.dev/
  * Text Domain: drusoft-shipping-for-speedy
@@ -55,7 +55,7 @@ if ( ! in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins',
  */
 define( 'DRUSHFO_PATH', plugin_dir_path( __FILE__ ) );
 define( 'DRUSHFO_URL',  plugin_dir_url( __FILE__ ) );
-define( 'DRUSHFO_VER',  '1.0.6' );
+define( 'DRUSHFO_VER',  '1.0.7' );
 
 /**
  * Load Dependencies
@@ -682,19 +682,92 @@ function drushfo_admin_show_office( $order ): void {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$office = $wpdb->get_row(
 		$wpdb->prepare(
-			"SELECT name, address FROM {$wpdb->prefix}drushfo_offices WHERE id = %d",
+			"SELECT name, address, office_type FROM {$wpdb->prefix}drushfo_offices WHERE id = %d",
 			$office_id
 		)
 	);
+
+	// Label automats (APT/APS) distinctly from regular offices.
+	$is_automat = $office && drushfo_is_automat( (string) $office->office_type, (string) $office->name );
+	$label      = $is_automat
+		? __( 'Speedy automat', 'drusoft-shipping-for-speedy' )
+		: __( 'Speedy office', 'drusoft-shipping-for-speedy' );
 
 	$value = $office
 		? sprintf( '%s — %s', $office->name, $office->address )
 		: __( 'Office not found in local database — please sync offices.', 'drusoft-shipping-for-speedy' );
 
 	echo '<p class="form-field form-field-wide"><strong>' .
-		esc_html__( 'Speedy office', 'drusoft-shipping-for-speedy' ) . ':</strong><br>' .
+		esc_html( $label ) . ':</strong><br>' .
 		esc_html( $value ) .
 		' <span style="color:#888">(#' . esc_html( (string) $office_id ) . ')</span></p>';
+}
+
+/**
+ * Resolve the customer-facing Speedy parcel-tracking info for an order.
+ *
+ * @param WC_Order $order The order.
+ * @return array{waybill:string,url:string}|null Null when there is no Speedy waybill yet.
+ */
+function drushfo_get_tracking_info( $order ): ?array {
+	if ( ! is_a( $order, 'WC_Order' ) ) {
+		return null;
+	}
+	$waybill = (string) $order->get_meta( '_drushfo_waybill_id' );
+	if ( '' === $waybill ) {
+		return null; // not shipped yet / not a Speedy waybill
+	}
+	return array(
+		'waybill' => $waybill,
+		'url'     => 'https://www.speedy.bg/track?id=' . rawurlencode( $waybill ),
+	);
+}
+
+/**
+ * Show the Speedy parcel-tracking link to the customer on the order details
+ * (order-received page, My Account → order, and the order-tracking page).
+ *
+ * @param WC_Order $order The order.
+ */
+add_action( 'woocommerce_order_details_after_order_table', 'drushfo_order_details_tracking' );
+function drushfo_order_details_tracking( $order ): void {
+	$t = drushfo_get_tracking_info( $order );
+	if ( ! $t ) {
+		return;
+	}
+	echo '<section class="drushfo-tracking" style="margin:0 0 24px">';
+	echo '<h2>' . esc_html__( 'Parcel tracking', 'drusoft-shipping-for-speedy' ) . '</h2>';
+	echo '<p>' . esc_html__( 'Waybill number', 'drusoft-shipping-for-speedy' ) . ': <strong>' . esc_html( $t['waybill'] ) . '</strong><br>';
+	echo '<a href="' . esc_url( $t['url'] ) . '" target="_blank" rel="noopener">' . esc_html__( 'Track your parcel with Speedy', 'drusoft-shipping-for-speedy' ) . '</a></p>';
+	echo '</section>';
+}
+
+/**
+ * Append the Speedy tracking link to customer order emails (skips admin copies).
+ * Appears once the waybill exists — e.g. on the completed-order email.
+ *
+ * @param WC_Order $order         The order.
+ * @param bool     $sent_to_admin Whether this email is the admin copy.
+ * @param bool     $plain_text    Whether this is the plain-text email.
+ */
+add_action( 'woocommerce_email_after_order_table', 'drushfo_email_tracking', 10, 3 );
+function drushfo_email_tracking( $order, $sent_to_admin = false, $plain_text = false ): void {
+	if ( $sent_to_admin ) {
+		return;
+	}
+	$t = drushfo_get_tracking_info( $order );
+	if ( ! $t ) {
+		return;
+	}
+	if ( $plain_text ) {
+		echo "\n" . esc_html__( 'Parcel tracking', 'drusoft-shipping-for-speedy' ) . ' (' . esc_html__( 'Speedy', 'drusoft-shipping-for-speedy' ) . "):\n";
+		echo esc_html__( 'Waybill number', 'drusoft-shipping-for-speedy' ) . ': ' . esc_html( $t['waybill'] ) . "\n";
+		echo esc_url( $t['url'] ) . "\n";
+	} else {
+		echo '<h2>' . esc_html__( 'Parcel tracking', 'drusoft-shipping-for-speedy' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Waybill number', 'drusoft-shipping-for-speedy' ) . ': <strong>' . esc_html( $t['waybill'] ) . '</strong><br>';
+		echo '<a href="' . esc_url( $t['url'] ) . '">' . esc_html__( 'Track your parcel with Speedy', 'drusoft-shipping-for-speedy' ) . '</a></p>';
+	}
 }
 
 /**
