@@ -104,6 +104,37 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					$order->add_meta_data( '_drushfo_office_id', $session_data['recipient']['pickupOfficeId'] );
 				}
 			}
+
+			// The city dropdown stores the Speedy siteId as its option value, so
+			// WC writes a numeric string (e.g. "56784") into billing_city /
+			// shipping_city. Convert the ID back to the proper city name AND
+			// normalize the postcode from our cities table so the saved address
+			// is human-readable everywhere (admin, invoice, CSV export). The
+			// original siteId is stashed in meta; the waybill reads it from
+			// _drushfo_order_data, so this conversion never affects the shipment.
+			global $wpdb;
+			foreach ( [ 'billing', 'shipping' ] as $addr ) {
+				$city_getter = "get_{$addr}_city";
+				$city_setter = "set_{$addr}_city";
+				$pc_setter   = "set_{$addr}_postcode";
+				$value       = (string) $order->$city_getter();
+				if ( $value === '' || ! ctype_digit( $value ) ) {
+					continue;
+				}
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$row = $wpdb->get_row( $wpdb->prepare(
+					"SELECT name, post_code FROM {$wpdb->prefix}drushfo_cities WHERE id = %d",
+					(int) $value
+				) );
+				if ( ! $row || empty( $row->name ) ) {
+					continue;
+				}
+				$order->add_meta_data( "_drushfo_{$addr}_city_id", (int) $value );
+				$order->$city_setter( $row->name );
+				if ( ! empty( $row->post_code ) ) {
+					$order->$pc_setter( $row->post_code );
+				}
+			}
 		}
 
 		/**
