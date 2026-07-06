@@ -3,7 +3,7 @@ Contributors: ventzie
 Tags: woocommerce, shipping, speedy, bulgaria, delivery
 Requires at least: 6.0
 Tested up to: 7.0
-Stable tag: 1.0.8
+Stable tag: 1.0.9
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -150,6 +150,10 @@ The plugin minimizes API calls through several strategies:
 * **Session storage** — Cart selections (city, delivery type, office) are stored in the WooCommerce session, so shipping calculations reuse the customer's choices without extra lookups.
 
 == Changelog ==
+
+= 1.0.9 =
+* Fixed: switching the shipping method to another courier via keyboard (arrow keys on the radio group), assistive technology or a script left this plugin's city dropdown active under the other courier, with Speedy city IDs the other courier could misread. The cleanup that previously ran only on mouse clicks now also runs for those switches.
+* Fixed: the script/style version constant had not been bumped since 1.0.7, so browsers could keep serving a cached older checkout script after updating the plugin.
 
 = 1.0.8 =
 * Fixed: the delivery city was stored as Speedy's internal site ID (e.g. "56784") in the order's billing/shipping city field, so the WooCommerce order screen, invoices and CSV exports showed a number instead of the city name. The city name and its postcode are now saved on the order, while the site ID is kept in order meta for waybill generation (delivery is unaffected).
