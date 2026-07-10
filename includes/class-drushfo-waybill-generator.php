@@ -104,6 +104,17 @@ if ( ! class_exists( 'Drushfo_Waybill_Generator' ) ) {
 			// Remove internal tracking keys (not part of the API)
 			unset( $payload['_selected_service_id'] );
 
+			// Apply the order's pickup profile (may have been changed by the
+			// admin after checkout) — rebuild the sender block from it.
+			$pickup_profile = (string) $order->get_meta( '_drushfo_pickup_profile' );
+			if ( '' !== $pickup_profile && class_exists( 'Drushfo_Shipping_Method' ) ) {
+				$method = new Drushfo_Shipping_Method( $instance_id );
+				$sender = $method->pickup_sender_block( $pickup_profile );
+				if ( ! empty( $sender ) ) {
+					$payload['sender'] = $sender;
+				}
+			}
+
 			// Convert calculate payload format to shipment format:
 			// The calculate endpoint uses service.serviceIds (array),
 			// but the shipment endpoint requires service.serviceId (single int).

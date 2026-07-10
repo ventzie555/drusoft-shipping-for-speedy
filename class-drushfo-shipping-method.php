@@ -97,6 +97,14 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					$session_data['_selected_service_id']  = $chosen_service_id;
 				}
 
+				// Record the resolved pickup profile: the admin order screen can
+				// override it before the waybill is generated.
+				$order_product_ids = [];
+				foreach ( $order->get_items() as $item ) {
+					$order_product_ids[] = (int) ( $item->get_variation_id() ?: $item->get_product_id() );
+				}
+				$order->add_meta_data( '_drushfo_pickup_profile', $this->resolve_pickup_profile_key( $order_product_ids ) );
+
 				// 4. Save to order meta
 				$order->add_meta_data( '_drushfo_order_data', $session_data );
 
@@ -497,6 +505,30 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					'type'        => 'text',
 					'placeholder' => '17:30',
 					'description' => __( 'Format HH:MM', 'drusoft-shipping-for-speedy' ),
+				],
+
+				// --- SECTION: ADDITIONAL PICKUP POINTS (multi-origin) ---
+				'section_pickup_profiles' => [
+					'title'       => __( 'Additional Pickup Points', 'drusoft-shipping-for-speedy' ),
+					'type'        => 'title',
+					'description' => __( 'Optional. Define extra origins (warehouses, suppliers, offices) shipments can be picked up from. The sender above is always available as the "default" profile. Assign a pickup point per product on its Shipping tab, or programmatically via the drushfo_pickup_profile filter.', 'drusoft-shipping-for-speedy' ),
+				],
+				'pickup_profiles' => [
+					'title'       => __( 'Pickup Points', 'drusoft-shipping-for-speedy' ),
+					'type'        => 'textarea',
+					'css'         => 'height:110px;font-family:monospace',
+					'placeholder' => "warehouse2 | Склад Изток | object:123456789 | Иван Иванов | 0888123456\nsupplier1 | Доставчик X | office:14 | Петър Петров | 0888654321",
+					'description' => __( 'One per line: key | label | office:&lt;office id&gt; OR object:&lt;Speedy client/object id&gt; | contact person | phone. Objects are pickup addresses registered on your Speedy contract (MySpeedy → Objects); offices are drop-off Speedy offices.', 'drusoft-shipping-for-speedy' ),
+				],
+				'pickup_mixed_policy' => [
+					'title'       => __( 'Mixed-cart Pickup Policy', 'drusoft-shipping-for-speedy' ),
+					'type'        => 'select',
+					'default'     => 'default_profile',
+					'options'     => [
+						'default_profile' => __( 'Use the default sender', 'drusoft-shipping-for-speedy' ),
+						'first_item'      => __( 'Use the first item\'s pickup point', 'drusoft-shipping-for-speedy' ),
+					],
+					'description' => __( 'Which origin to use when cart items are assigned to different pickup points.', 'drusoft-shipping-for-speedy' ),
 				],
 
 				// --- SECTION: SHIPMENT SETTINGS ---
@@ -1850,6 +1882,120 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 		 * @param float|null $file_price       CSV file shipping cost (null = not active).
 		 * @return array The API request payload (without credentials).
 		 */
+		/**
+		 * All configured pickup profiles, keyed by profile key.
+		 *
+		 * 'default' is always present and mirrors the legacy sender_* settings,
+		 * so existing installs behave exactly as before.
+		 *
+		 * @return array<string, array{key:string,label:string,mode:string,id:int,contact:string,phone:string}>
+		 */
+		public function get_pickup_profiles(): array {
+			$profiles = [
+				'default' => [
+					'key'     => 'default',
+					'label'   => __( 'Default sender', 'drusoft-shipping-for-speedy' ),
+					'mode'    => 'YES' === $this->get_option( 'sender_officeyesno' ) ? 'office' : 'object',
+					'id'      => 'YES' === $this->get_option( 'sender_officeyesno' )
+						? (int) $this->get_option( 'sender_office' )
+						: (int) $this->get_option( 'sender_id' ),
+					'contact' => (string) $this->get_option( 'sender_name' ),
+					'phone'   => (string) $this->get_option( 'sender_phone' ),
+				],
+			];
+			foreach ( preg_split( '/\r\n|\r|\n/', (string) $this->get_option( 'pickup_profiles', '' ) ) as $line ) {
+				$parts = array_map( 'trim', explode( '|', $line ) );
+				if ( count( $parts ) < 3 || '' === $parts[0] ) {
+					continue;
+				}
+				if ( ! preg_match( '/^(office|object):(\d+)$/', $parts[2], $m ) ) {
+					continue;
+				}
+				$key = sanitize_key( $parts[0] );
+				$profiles[ $key ] = [
+					'key'     => $key,
+					'label'   => $parts[1] ?: $key,
+					'mode'    => $m[1],
+					'id'      => (int) $m[2],
+					'contact' => $parts[3] ?? '',
+					'phone'   => $parts[4] ?? '',
+				];
+			}
+			return $profiles;
+		}
+
+		/**
+		 * Resolve which pickup profile applies for a set of products.
+		 *
+		 * Per-product assignment (_drushfo_pickup_profile meta) wins when all
+		 * items agree; disagreements fall back to the mixed-cart policy. The
+		 * drushfo_pickup_profile filter has the final word (used for
+		 * programmatic routing, e.g. supplier-based dropshipping).
+		 *
+		 * @param int[] $product_ids Product/variation IDs in the cart or order.
+		 */
+		public function resolve_pickup_profile_key( array $product_ids ): string {
+			$profiles = $this->get_pickup_profiles();
+			$assigned = [];
+			foreach ( $product_ids as $pid ) {
+				$key = get_post_meta( $pid, '_drushfo_pickup_profile', true );
+				if ( ! $key && ( $parent = wp_get_post_parent_id( $pid ) ) ) {
+					$key = get_post_meta( $parent, '_drushfo_pickup_profile', true );
+				}
+				$assigned[] = ( $key && isset( $profiles[ $key ] ) ) ? $key : 'default';
+			}
+			$unique = array_values( array_unique( $assigned ) );
+			if ( 1 === count( $unique ) ) {
+				$resolved = $unique[0];
+			} elseif ( 'first_item' === $this->get_option( 'pickup_mixed_policy', 'default_profile' ) ) {
+				$resolved = $assigned[0];
+			} else {
+				$resolved = 'default';
+			}
+			/**
+			 * Filter the resolved pickup profile key.
+			 *
+			 * @param string $resolved    Resolved profile key.
+			 * @param int[]  $product_ids Products being shipped.
+			 * @param array  $profiles    All configured profiles.
+			 */
+			$resolved = apply_filters( 'drushfo_pickup_profile', $resolved, $product_ids, $profiles );
+			return isset( $profiles[ $resolved ] ) ? $resolved : 'default';
+		}
+
+		/**
+		 * Sender block for the Speedy calculate/shipment APIs from a profile.
+		 * Offices become dropoffOfficeId; objects (contract pickup addresses
+		 * registered in MySpeedy) become clientId — Speedy resolves the address
+		 * and prices the address-pickup surcharge itself.
+		 */
+		public function pickup_sender_block( string $profile_key ): array {
+			$profiles = $this->get_pickup_profiles();
+			$p        = $profiles[ $profile_key ] ?? $profiles['default'];
+			$sender   = [];
+			if ( 'office' === $p['mode'] && $p['id'] > 0 ) {
+				$sender['dropoffOfficeId'] = $p['id'];
+				// office drop-offs still bill to our contract client when set
+				$client = (int) $this->get_option( 'sender_id' );
+				if ( $client > 0 ) {
+					$sender['clientId'] = $client;
+				}
+			} elseif ( $p['id'] > 0 ) {
+				$sender['clientId'] = $p['id'];
+			}
+			if ( '' !== $p['contact'] ) {
+				$sender['contactName'] = $p['contact'];
+			}
+			if ( '' !== $p['phone'] ) {
+				$sender['phone1'] = [ 'number' => $p['phone'] ];
+			}
+			$email = $this->get_option( 'sender_email' );
+			if ( ! empty( $email ) ) {
+				$sender['email'] = $email;
+			}
+			return $sender;
+		}
+
 		private function build_api_calculate_payload(
 			string $delivery_type,
 			int $office_id,
@@ -1868,36 +2014,17 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 
 			// ── Sender ──
 			// The Speedy /v1/calculate API requires sender data to determine
-			// pricing based on the sender's contract and location. This matches
-			// the old plugin behavior which always includes full sender details.
-			$sender = [];
-
-			$sender_id = (int) $this->get_option( 'sender_id' );
-			if ( $sender_id > 0 ) {
-				$sender['clientId'] = $sender_id;
-			}
-
-			$sender_phone = $this->get_option( 'sender_phone' );
-			if ( ! empty( $sender_phone ) ) {
-				$sender['phone1'] = [ 'number' => $sender_phone ];
-			}
-
-			$sender_name = $this->get_option( 'sender_name' );
-			if ( ! empty( $sender_name ) ) {
-				$sender['contactName'] = $sender_name;
-			}
-
-			$sender_email = $this->get_option( 'sender_email' );
-			if ( ! empty( $sender_email ) ) {
-				$sender['email'] = $sender_email;
-			}
-
-			if ( 'YES' === $this->get_option( 'sender_officeyesno' ) ) {
-				$drop_off = (int) $this->get_option( 'sender_office' );
-				if ( $drop_off > 0 ) {
-					$sender['dropoffOfficeId'] = $drop_off;
+			// pricing based on the sender's contract and location. The origin is
+			// resolved per cart via pickup profiles ('default' = legacy sender
+			// settings), so multi-origin quotes price the correct pickup point.
+			$cart_product_ids = [];
+			if ( function_exists( 'WC' ) && WC()->cart ) {
+				foreach ( WC()->cart->get_cart() as $cart_item ) {
+					$cart_product_ids[] = (int) ( $cart_item['variation_id'] ?: $cart_item['product_id'] );
 				}
 			}
+			$pickup_key = $this->resolve_pickup_profile_key( $cart_product_ids );
+			$sender     = $this->pickup_sender_block( $pickup_key );
 
 			// If no sender data was set, send empty object so JSON encodes as {}
 			if ( empty( $sender ) ) {

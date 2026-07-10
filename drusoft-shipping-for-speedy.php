@@ -971,6 +971,114 @@ function drushfo_get_first_credentials(): ?array {
 }
 
 /**
+ * Helper: first configured shipping-method instance id (for contexts outside
+ * a zone, e.g. the product edit screen).
+ */
+function drushfo_get_first_instance_id(): int {
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$name = $wpdb->get_var(
+		"SELECT option_name FROM $wpdb->options
+		 WHERE option_name LIKE 'woocommerce\_drushfo\_speedy\_%\_settings' LIMIT 1"
+	);
+	return $name && preg_match( '/_(\d+)_settings$/', $name, $m ) ? (int) $m[1] : 0;
+}
+
+/**
+ * Product edit screen: "Pickup point" select on the Shipping tab.
+ * Only rendered when extra pickup profiles are configured.
+ */
+function drushfo_product_pickup_field(): void {
+	$instance_id = drushfo_get_first_instance_id();
+	if ( ! $instance_id || ! class_exists( 'Drushfo_Shipping_Method' ) ) {
+		return;
+	}
+	$method   = new Drushfo_Shipping_Method( $instance_id );
+	$profiles = $method->get_pickup_profiles();
+	if ( count( $profiles ) < 2 ) {
+		return;
+	}
+	$options = [];
+	foreach ( $profiles as $key => $p ) {
+		$options[ $key ] = $p['label'];
+	}
+	woocommerce_wp_select( [
+		'id'          => '_drushfo_pickup_profile',
+		'label'       => __( 'Speedy pickup point', 'drusoft-shipping-for-speedy' ),
+		'options'     => $options,
+		'desc_tip'    => true,
+		'description' => __( 'Where Speedy collects this product from (e.g. a supplier warehouse for dropshipping).', 'drusoft-shipping-for-speedy' ),
+	] );
+}
+add_action( 'woocommerce_product_options_shipping', 'drushfo_product_pickup_field' );
+
+function drushfo_save_product_pickup_field( int $post_id ): void {
+	if ( isset( $_POST['_drushfo_pickup_profile'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WC product save handles the nonce.
+		$key = sanitize_key( wp_unslash( $_POST['_drushfo_pickup_profile'] ) );
+		if ( 'default' === $key ) {
+			delete_post_meta( $post_id, '_drushfo_pickup_profile' );
+		} else {
+			update_post_meta( $post_id, '_drushfo_pickup_profile', $key );
+		}
+	}
+}
+add_action( 'woocommerce_process_product_meta', 'drushfo_save_product_pickup_field' );
+
+/**
+ * Order admin: pickup-profile selector (shown until the waybill exists), so
+ * the origin can be changed per order before generating the waybill.
+ */
+function drushfo_admin_pickup_selector( $order ): void {
+	if ( ! $order instanceof WC_Order ) {
+		return;
+	}
+	$shipping_methods = $order->get_shipping_methods();
+	$shipping_method  = reset( $shipping_methods );
+	if ( ! $shipping_method || 'drushfo_speedy' !== $shipping_method->get_method_id() ) {
+		return;
+	}
+	if ( $order->get_meta( '_drushfo_waybill_id' ) ) {
+		return; // waybill already generated — origin is fixed
+	}
+	if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
+		return;
+	}
+	$method   = new Drushfo_Shipping_Method( $shipping_method->get_instance_id() );
+	$profiles = $method->get_pickup_profiles();
+	if ( count( $profiles ) < 2 ) {
+		return;
+	}
+	$current = (string) $order->get_meta( '_drushfo_pickup_profile' );
+	if ( '' === $current ) {
+		$current = 'default';
+	}
+	echo '<p class="form-field form-field-wide"><label for="drushfo_pickup_profile"><strong>'
+		. esc_html__( 'Speedy pickup point', 'drusoft-shipping-for-speedy' ) . '</strong></label>';
+	echo '<select name="drushfo_pickup_profile" id="drushfo_pickup_profile">';
+	foreach ( $profiles as $key => $p ) {
+		printf(
+			'<option value="%s"%s>%s</option>',
+			esc_attr( $key ),
+			selected( $current, $key, false ),
+			esc_html( $p['label'] )
+		);
+	}
+	echo '</select></p>';
+}
+add_action( 'woocommerce_admin_order_data_after_shipping_address', 'drushfo_admin_pickup_selector' );
+
+function drushfo_save_admin_pickup_selector( int $order_id ): void {
+	if ( isset( $_POST['drushfo_pickup_profile'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WC order save handles the nonce.
+		$order = wc_get_order( $order_id );
+		if ( $order && ! $order->get_meta( '_drushfo_waybill_id' ) ) {
+			$order->update_meta_data( '_drushfo_pickup_profile', sanitize_key( wp_unslash( $_POST['drushfo_pickup_profile'] ) ) );
+			$order->save();
+		}
+	}
+}
+add_action( 'woocommerce_process_shop_order_meta', 'drushfo_save_admin_pickup_selector', 20 );
+
+/**
  * Helper: Transliterate Latin to Cyrillic (Bulgarian standard)
  */
 /*
