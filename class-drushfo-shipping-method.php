@@ -596,17 +596,7 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 						static fn( $p ) => $p['label'],
 						$this->get_pickup_profiles()
 					),
-					'description' => __( 'Used for products without an explicit pickup-point assignment.', 'drusoft-shipping-for-speedy' ),
-				],
-				'pickup_mixed_policy' => [
-					'title'       => __( 'Mixed-cart Pickup Policy', 'drusoft-shipping-for-speedy' ),
-					'type'        => 'select',
-					'default'     => 'default_profile',
-					'options'     => [
-						'default_profile' => __( 'Use the default pickup point', 'drusoft-shipping-for-speedy' ),
-						'first_item'      => __( 'Use the first item\'s pickup point', 'drusoft-shipping-for-speedy' ),
-					],
-					'description' => __( 'Which origin to use when cart items are assigned to different pickup points.', 'drusoft-shipping-for-speedy' ),
+					'description' => __( 'Used for products without an explicit pickup-point assignment. Mixed baskets consolidate through this point.', 'drusoft-shipping-for-speedy' ),
 				],
 
 				// --- SECTION: SHIPMENT SETTINGS ---
@@ -2040,14 +2030,10 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 				}
 				$assigned[] = ( $key && isset( $profiles[ $key ] ) ) ? $key : $default;
 			}
-			$unique = array_values( array_unique( $assigned ) );
-			if ( 1 === count( $unique ) ) {
-				$resolved = $unique[0];
-			} elseif ( 'first_item' === $this->pickup_opt( 'pickup_mixed_policy', 'default_profile' ) ) {
-				$resolved = $assigned[0];
-			} else {
-				$resolved = $default;
-			}
+			// Mixed assignments consolidate through the default pickup point
+			// (split-into-parcels is the planned alternative policy).
+			$unique   = array_values( array_unique( $assigned ) );
+			$resolved = 1 === count( $unique ) ? $unique[0] : $default;
 			/**
 			 * Filter the resolved pickup profile key.
 			 *
