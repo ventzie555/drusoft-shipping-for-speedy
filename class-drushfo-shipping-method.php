@@ -99,11 +99,24 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 
 				// Record the resolved pickup profile: the admin order screen can
 				// override it before the waybill is generated.
+				// This hook fires on EVERY instantiation of the method (including
+				// the profile-less template instance 0), so resolve through the
+				// CHOSEN method's zone instance and write idempotently.
+				$chosen_instance = 0;
+				foreach ( $chosen_methods as $method_id ) {
+					if ( str_starts_with( $method_id, $this->id ) && str_contains( $method_id, ':' ) ) {
+						$chosen_instance = (int) substr( strrchr( $method_id, ':' ), 1 );
+						break;
+					}
+				}
+				$resolver = ( $chosen_instance && $chosen_instance !== (int) $this->instance_id )
+					? new self( $chosen_instance )
+					: $this;
 				$order_product_ids = [];
 				foreach ( $order->get_items() as $item ) {
 					$order_product_ids[] = (int) ( $item->get_variation_id() ?: $item->get_product_id() );
 				}
-				$order->add_meta_data( '_drushfo_pickup_profile', $this->resolve_pickup_profile_key( $order_product_ids ) );
+				$order->update_meta_data( '_drushfo_pickup_profile', $resolver->resolve_pickup_profile_key( $order_product_ids ) );
 
 				// 4. Save to order meta
 				$order->add_meta_data( '_drushfo_order_data', $session_data );
@@ -1892,6 +1905,20 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 		 * @param float|null $file_price       CSV file shipping cost (null = not active).
 		 * @return array The API request payload (without credentials).
 		 */
+
+		/**
+		 * Instance-settings reader safe to call while form fields are still
+		 * being built (get_option() can't resolve instance settings for keys
+		 * not yet registered — same chicken-and-egg as sender_city above).
+		 */
+		private function pickup_opt( string $key, string $fallback = '' ): string {
+			if ( empty( $this->instance_settings ) ) {
+				$this->init_instance_settings();
+			}
+			$v = $this->instance_settings[ $key ] ?? '';
+			return '' === $v || null === $v ? $fallback : (string) $v;
+		}
+
 		/**
 		 * All configured pickup profiles, keyed by profile key.
 		 *
@@ -1913,7 +1940,7 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					'phone'   => (string) $this->get_option( 'sender_phone' ),
 				],
 			];
-			foreach ( preg_split( '/\r\n|\r|\n/', (string) $this->get_option( 'pickup_profiles', '' ) ) as $line ) {
+			foreach ( preg_split( '/\r\n|\r|\n/', $this->pickup_opt( 'pickup_profiles' ) ) as $line ) {
 				$parts = array_map( 'trim', explode( '|', $line ) );
 				if ( count( $parts ) < 3 || '' === $parts[0] ) {
 					continue;
@@ -1946,7 +1973,7 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 		 */
 		public function resolve_pickup_profile_key( array $product_ids ): string {
 			$profiles = $this->get_pickup_profiles();
-			$default  = (string) $this->get_option( 'pickup_default_profile', 'default' );
+			$default  = $this->pickup_opt( 'pickup_default_profile', 'default' );
 			if ( ! isset( $profiles[ $default ] ) ) {
 				$default = 'default';
 			}
@@ -1961,7 +1988,7 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 			$unique = array_values( array_unique( $assigned ) );
 			if ( 1 === count( $unique ) ) {
 				$resolved = $unique[0];
-			} elseif ( 'first_item' === $this->get_option( 'pickup_mixed_policy', 'default_profile' ) ) {
+			} elseif ( 'first_item' === $this->pickup_opt( 'pickup_mixed_policy', 'default_profile' ) ) {
 				$resolved = $assigned[0];
 			} else {
 				$resolved = $default;
