@@ -53,6 +53,10 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 
 			// Save shipping data to order
 			add_action( 'woocommerce_checkout_create_order', array( $this, 'save_shipping_data_to_order' ), 10, 2 );
+
+			// Convert the stashed mixed-pickup meta into a real order note
+			// once the order exists (idempotent — the meta is consumed).
+			add_action( 'woocommerce_checkout_order_created', array( $this, 'add_mixed_pickup_note' ) );
 		}
 
 		/**
@@ -118,6 +122,35 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 				}
 				$order->update_meta_data( '_drushfo_pickup_profile', $resolver->resolve_pickup_profile_key( $order_product_ids ) );
 
+			// Mixed basket (items assigned to different pickup points): the
+			// order ships CONSOLIDATED from the resolved origin — flag it and
+			// leave an order note so fulfilment knows goods must be gathered.
+			$profiles   = $resolver->get_pickup_profiles();
+			$item_lines = [];
+			$item_keys  = [];
+			foreach ( $order->get_items() as $item ) {
+				$pid = (int) ( $item->get_variation_id() ?: $item->get_product_id() );
+				$key = get_post_meta( $pid, '_drushfo_pickup_profile', true );
+				if ( ! $key && ( $parent = wp_get_post_parent_id( $pid ) ) ) {
+					$key = get_post_meta( $parent, '_drushfo_pickup_profile', true );
+				}
+				if ( ! $key || ! isset( $profiles[ $key ] ) ) {
+					$key = $resolver->pickup_opt( 'pickup_default_profile', 'default' );
+					if ( ! isset( $profiles[ $key ] ) ) {
+						$key = 'default';
+					}
+				}
+				$item_keys[]  = $key;
+				$item_lines[] = $item->get_name() . ' → ' . $profiles[ $key ]['label'];
+			}
+			if ( count( array_unique( $item_keys ) ) > 1 ) {
+				$order->update_meta_data( '_drushfo_pickup_mixed', 1 );
+				// The order has no ID yet inside checkout_create_order, so the
+				// note text is stashed in meta and converted to a real order
+				// note in add_mixed_pickup_note() once the order is saved.
+				$order->update_meta_data( '_drushfo_pickup_note', implode( "\n", $item_lines ) );
+			}
+
 				// 4. Save to order meta
 				$order->add_meta_data( '_drushfo_order_data', $session_data );
 
@@ -156,6 +189,28 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					$order->$pc_setter( $row->post_code );
 				}
 			}
+		}
+
+		/**
+		 * Turn the stashed mixed-pickup meta into an order note. Runs on
+		 * woocommerce_checkout_order_created (order saved, has an ID); the
+		 * meta is consumed so multiple registered instances add it once.
+		 *
+		 * @param WC_Order $order The created order.
+		 */
+		public function add_mixed_pickup_note( $order ): void {
+			if ( ! $order instanceof WC_Order ) {
+				return;
+			}
+			$lines = (string) $order->get_meta( '_drushfo_pickup_note' );
+			if ( '' === $lines ) {
+				return;
+			}
+			$order->delete_meta_data( '_drushfo_pickup_note' );
+			$order->save();
+			$order->add_order_note(
+				__( 'Mixed pickup points — consolidate before shipping:', 'drusoft-shipping-for-speedy' ) . "\n" . $lines
+			);
 		}
 
 		/**
@@ -1911,7 +1966,7 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 		 * being built (get_option() can't resolve instance settings for keys
 		 * not yet registered — same chicken-and-egg as sender_city above).
 		 */
-		private function pickup_opt( string $key, string $fallback = '' ): string {
+		public function pickup_opt( string $key, string $fallback = '' ): string {
 			if ( empty( $this->instance_settings ) ) {
 				$this->init_instance_settings();
 			}

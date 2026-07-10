@@ -1063,7 +1063,13 @@ function drushfo_admin_pickup_selector( $order ): void {
 			esc_html( $p['label'] )
 		);
 	}
-	echo '</select></p>';
+	echo '</select>';
+	if ( $order->get_meta( '_drushfo_pickup_mixed' ) ) {
+		echo '<span style="display:block;margin-top:4px;color:#996800;font-weight:600;">⚠ '
+			. esc_html__( 'Mixed pickup points — items come from different origins; consolidate before creating the waybill (see order notes).', 'drusoft-shipping-for-speedy' )
+			. '</span>';
+	}
+	echo '</p>';
 }
 add_action( 'woocommerce_admin_order_data_after_shipping_address', 'drushfo_admin_pickup_selector' );
 
