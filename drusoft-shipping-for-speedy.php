@@ -1040,6 +1040,13 @@ function drushfo_admin_pickup_selector( $order ): void {
 	if ( $order->get_meta( '_drushfo_waybill_id' ) ) {
 		return; // waybill already generated — origin is fixed
 	}
+	if ( $split = (int) $order->get_meta( '_drushfo_pickup_split' ) ) {
+		echo '<p class="form-field form-field-wide" style="color:#2271b1;font-weight:600;">'
+			/* translators: %d: number of parcels */
+			. esc_html( sprintf( __( 'Split shipment: %d parcels, one per pickup point (see order notes).', 'drusoft-shipping-for-speedy' ), $split ) )
+			. '</p>';
+		return;
+	}
 	if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 		return;
 	}

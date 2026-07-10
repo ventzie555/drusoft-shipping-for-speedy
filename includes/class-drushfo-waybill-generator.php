@@ -104,6 +104,10 @@ if ( ! class_exists( 'Drushfo_Waybill_Generator' ) ) {
 			// Remove internal tracking keys (not part of the API)
 			unset( $payload['_selected_service_id'] );
 
+			// Split shipments: secondary parcels embedded at quote time.
+			$split_parcels = $payload['_split_parcels'] ?? [];
+			unset( $payload['_split_parcels'] );
+
 			// Apply the order's pickup profile (may have been changed by the
 			// admin after checkout) — rebuild the sender block from it.
 			$pickup_profile = (string) $order->get_meta( '_drushfo_pickup_profile' );
@@ -193,12 +197,69 @@ if ( ! class_exists( 'Drushfo_Waybill_Generator' ) ) {
 			}
 
 			if ( isset( $body['id'] ) ) {
-				$waybill_id = $body['id'];
+				$waybill_id  = $body['id'];
+				$waybill_ids = [ $waybill_id ];
 
 				// Save the waybill ID and the full response to the order
 				$order->update_meta_data( '_drushfo_waybill_id', $waybill_id );
 				$order->update_meta_data( '_drushfo_waybill_response', $body );
 				$order->add_order_note( __( 'Speedy Waybill Created: ', 'drusoft-shipping-for-speedy' ) . $waybill_id );
+
+				// Secondary parcels (split shipments): same recipient and
+				// service, own sender/contents/COD — one waybill each.
+				$parcel_no = 1;
+				foreach ( $split_parcels as $parcel ) {
+					$parcel_no++;
+					$parcel['userName'] = $username;
+					$parcel['password'] = $password;
+					if ( isset( $parcel['service']['serviceIds'] ) && is_array( $parcel['service']['serviceIds'] ) ) {
+						$parcel['service']['serviceId'] = $parcel['service']['serviceIds'][0];
+						unset( $parcel['service']['serviceIds'] );
+					}
+					if ( ! isset( $parcel['content']['package'] ) ) {
+						$parcel['content']['package'] = $settings['opakovka'] ?? 'BOX';
+					}
+					if ( 'PALLET' === $parcel['content']['package'] && isset( $parcel['recipient']['pickupOfficeId'] )
+						&& 'automat' === $order->get_meta( '_drushfo_delivery_type' ) ) {
+						$parcel['content']['package'] = 'BOX';
+					}
+					$parcel['recipient']['clientName']       = $order->get_formatted_shipping_full_name();
+					$parcel['recipient']['phone1']['number'] = $order->get_billing_phone();
+					$parcel['recipient']['email']            = $order->get_billing_email();
+					/* translators: 1: order number, 2: parcel number */
+					$parcel['ref1'] = sprintf( __( 'Order #%1$s / parcel %2$d', 'drusoft-shipping-for-speedy' ), $order->get_order_number(), $parcel_no );
+					if ( isset( $parcel['recipient']['addressLocation'] ) ) {
+						$full_address = $order->get_shipping_address_1();
+						if ( $order->get_shipping_address_2() ) {
+							$full_address .= ', ' . $order->get_shipping_address_2();
+						}
+						$parcel['recipient']['addressLocation']['addressNote'] = $full_address;
+					}
+
+					$p_response = wp_remote_post( 'https://api.speedy.bg/v1/shipment/', [
+						'headers' => [
+							'Content-Type' => 'application/json',
+							'Accept'       => 'application/json',
+						],
+						'body'    => wp_json_encode( $parcel ),
+						'timeout' => 20,
+					] );
+					$p_body = is_wp_error( $p_response ) ? null : json_decode( wp_remote_retrieve_body( $p_response ), true );
+					if ( is_wp_error( $p_response ) || ! empty( $p_body['error'] ) || empty( $p_body['id'] ) ) {
+						$p_msg = is_wp_error( $p_response )
+							? $p_response->get_error_message()
+							: ( $p_body['error']['message'] ?? __( 'Unknown API error', 'drusoft-shipping-for-speedy' ) );
+						/* translators: 1: parcel number, 2: error message */
+						$order->add_order_note( sprintf( __( 'Speedy Waybill Error (parcel %1$d): %2$s — create it manually.', 'drusoft-shipping-for-speedy' ), $parcel_no, $p_msg ) );
+						continue;
+					}
+					$waybill_ids[] = $p_body['id'];
+					/* translators: 1: parcel number, 2: waybill id */
+					$order->add_order_note( sprintf( __( 'Speedy Waybill Created (parcel %1$d): %2$s', 'drusoft-shipping-for-speedy' ), $parcel_no, $p_body['id'] ) );
+				}
+				if ( count( $waybill_ids ) > 1 ) {
+					$order->update_meta_data( '_drushfo_waybill_ids', $waybill_ids );
+				}
 				$order->save();
 
 				return $waybill_id;

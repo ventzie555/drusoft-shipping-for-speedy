@@ -120,7 +120,15 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 				foreach ( $order->get_items() as $item ) {
 					$order_product_ids[] = (int) ( $item->get_variation_id() ?: $item->get_product_id() );
 				}
-				$order->update_meta_data( '_drushfo_pickup_profile', $resolver->resolve_pickup_profile_key( $order_product_ids ) );
+				if ( ! empty( $session_data['_split_parcels'] ) ) {
+					// Split shipment: each parcel's sender is baked into its
+					// payload — no single pickup profile applies, and the
+					// waybill-time sender override must not fire.
+					$order->update_meta_data( '_drushfo_pickup_profile', '' );
+					$order->update_meta_data( '_drushfo_pickup_split', count( $session_data['_split_parcels'] ) + 1 );
+				} else {
+					$order->update_meta_data( '_drushfo_pickup_profile', $resolver->resolve_pickup_profile_key( $order_product_ids ) );
+				}
 
 			// Mixed basket (items assigned to different pickup points): the
 			// order ships CONSOLIDATED from the resolved origin — flag it and
@@ -208,9 +216,10 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 			}
 			$order->delete_meta_data( '_drushfo_pickup_note' );
 			$order->save();
-			$order->add_order_note(
-				__( 'Mixed pickup points — consolidate before shipping:', 'drusoft-shipping-for-speedy' ) . "\n" . $lines
-			);
+			$intro = $order->get_meta( '_drushfo_pickup_split' )
+				? __( 'Mixed pickup points — ships as separate parcels:', 'drusoft-shipping-for-speedy' )
+				: __( 'Mixed pickup points — consolidate before shipping:', 'drusoft-shipping-for-speedy' );
+			$order->add_order_note( $intro . "\n" . $lines );
 		}
 
 		/**
@@ -596,7 +605,17 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 						static fn( $p ) => $p['label'],
 						$this->get_pickup_profiles()
 					),
-					'description' => __( 'Used for products without an explicit pickup-point assignment. Mixed baskets consolidate through this point.', 'drusoft-shipping-for-speedy' ),
+					'description' => __( 'Used for products without an explicit pickup-point assignment.', 'drusoft-shipping-for-speedy' ),
+				],
+				'pickup_mixed_policy' => [
+					'title'       => __( 'Mixed-basket Handling', 'drusoft-shipping-for-speedy' ),
+					'type'        => 'select',
+					'default'     => 'consolidate',
+					'options'     => [
+						'consolidate' => __( 'Consolidate — one parcel from the default pickup point', 'drusoft-shipping-for-speedy' ),
+						'split'       => __( 'Split — one parcel per pickup point (summed price, COD per parcel)', 'drusoft-shipping-for-speedy' ),
+					],
+					'description' => __( 'What happens when basket items are assigned to different pickup points. Split keeps one courier and delivery point; the customer sees the parcel count and the summed delivery price.', 'drusoft-shipping-for-speedy' ),
 				],
 
 				// --- SECTION: SHIPMENT SETTINGS ---
@@ -1426,12 +1445,57 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 				return;
 			}
 
+			// --- 5b. Mixed basket with split policy: one parcel per pickup point.
+			// The PRIMARY parcel replaces $payload (rebuilt for its own group);
+			// SECONDARY parcels ride along in $payload['_split_parcels'] so they
+			// flow through session -> order meta -> waybill untouched. The
+			// customer keeps one courier/office choice; only the price (sum)
+			// and the parcel count change.
+			$split_parcels = [];
+			$split_count   = 1;
+			if ( 'split' === $this->pickup_opt( 'pickup_mixed_policy', 'consolidate' ) ) {
+				$groups = $this->split_cart_groups();
+				if ( count( $groups ) > 1 ) {
+					$default_key = $this->pickup_opt( 'pickup_default_profile', 'default' );
+					$primary_key = isset( $groups[ $default_key ] ) ? $default_key : array_key_first( $groups );
+					$build_group = function ( string $key, array $g ) use ( $delivery_type, $office_id, $city_id, $is_cod, $payment_method, $is_free_shipping, $is_fixed, $fixed_price, $is_file, $file_cost ) {
+						$this->pickup_key_override = $key;
+						$p = $this->build_api_calculate_payload(
+							$delivery_type, $office_id, $city_id,
+							$g['weight'], $g['subtotal'], $g['subtotal'],
+							$is_cod, $payment_method, $is_free_shipping,
+							$is_fixed ? $fixed_price : null,
+							$is_file ? $file_cost : null
+						);
+						$this->pickup_key_override = null;
+						$p['content']['contents'] = mb_substr( implode( ', ', $g['names'] ), 0, 100 );
+						return $p;
+					};
+					$payload = $build_group( $primary_key, $groups[ $primary_key ] );
+					foreach ( $groups as $g_key => $g ) {
+						if ( $g_key === $primary_key ) {
+							continue;
+						}
+						$split_parcels[ $g_key ] = $build_group( $g_key, $g );
+					}
+					$split_count = count( $groups );
+				}
+			}
+
 			// --- 6. Determine final cost ---
 			// When we already know the price (free / fixed / file), skip the API
 			// call entirely — it adds latency and its errors are irrelevant.
 			// The API is only needed for 'speedycalculator' and 'nadbavka' modes.
 			if ( null !== $override_cost ) {
 				$final_cost = $override_cost;
+				if ( $split_parcels ) {
+					// Fixed/CSV override prices are per PARCEL — the customer
+					// pays one price per shipment; free shipping stays free.
+					if ( ! $is_free_shipping ) {
+						$final_cost = $override_cost * $split_count;
+					}
+					$payload['_split_parcels'] = $split_parcels;
+				}
 
 				// Store cost in session
 				if ( WC()->session ) {
@@ -1445,6 +1509,10 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 				$label = $this->title;
 				if ( $is_free_shipping ) {
 					$label .= ' (' . __( 'Free shipping', 'drusoft-shipping-for-speedy' ) . ')';
+				}
+				if ( $split_parcels ) {
+					/* translators: %d: number of parcels */
+					$label .= ' (' . sprintf( _n( '%d parcel', '%d parcels', $split_count, 'drusoft-shipping-for-speedy' ), $split_count ) . ')';
 				}
 
 				$this->add_rate( [
@@ -1549,6 +1617,31 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					return;
 				}
 
+				// Secondary parcels: price each against the same services and
+				// sum per service. A parcel that fails to price makes the whole
+				// split unpriceable — fall back to the last known cost.
+				$split_costs = [];
+				foreach ( $split_parcels as $sp_key => $sp_payload ) {
+					$sp_payload['userName'] = $username;
+					$sp_payload['password'] = $password;
+					$sp_response = $this->call_speedy_calculate_api( $sp_payload );
+					if ( is_wp_error( $sp_response ) || ! empty( $sp_response['error'] ) || empty( $sp_response['calculations'] ) ) {
+						$fallback = WC()->session ? WC()->session->get( 'drushfo_shipping_cost', 0 ) : 0;
+						$this->add_rate( [
+							'id'    => $this->get_rate_id(),
+							'label' => $this->title,
+							'cost'  => number_format( (float) $fallback, 2, '.', '' ),
+						] );
+						return;
+					}
+					foreach ( $sp_response['calculations'] as $sp_calc ) {
+						if ( isset( $sp_calc['price']['total'], $sp_calc['serviceId'] ) ) {
+							$sid = (int) $sp_calc['serviceId'];
+							$split_costs[ $sid ] = ( $split_costs[ $sid ] ?? 0 ) + (float) $sp_calc['price']['total'];
+						}
+					}
+				}
+
 				// Build a service ID → name map from the settings
 				$service_names = $this->get_speedy_service_names();
 
@@ -1569,7 +1662,7 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					$service_id = (int) $calc['serviceId'];
 					$api_total  = (float) $calc['price']['total'];
 
-					$final_cost = $api_total;
+					$final_cost = $api_total + ( $split_costs[ $service_id ] ?? 0 );
 					if ( 'nadbavka' === $cenadostavka ) {
 						$final_cost += (float) $this->get_option( 'suma_nadbavka', 0 );
 					}
@@ -1592,6 +1685,16 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					$svc_payload = $session_payload;
 					$svc_payload['service']['serviceIds'] = [ $service_id ];
 					$svc_payload['_selected_service_id']  = $service_id;
+					if ( $split_parcels ) {
+						$svc_payload['_split_parcels'] = array_map(
+							static function ( $sp ) use ( $service_id ) {
+								unset( $sp['userName'], $sp['password'] );
+								$sp['service']['serviceIds'] = [ $service_id ];
+								return $sp;
+							},
+							$split_parcels
+						);
+					}
 
 					if ( WC()->session ) {
 						WC()->session->set( 'drushfo_shipping_data_' . $service_id, $svc_payload );
@@ -1616,13 +1719,28 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					$active_payload = $session_payload;
 					$active_payload['service']['serviceIds'] = [ $active_service_id ];
 					$active_payload['_selected_service_id']  = $active_service_id;
+					if ( $split_parcels ) {
+						$active_payload['_split_parcels'] = array_map(
+							static function ( $sp ) use ( $active_service_id ) {
+								unset( $sp['userName'], $sp['password'] );
+								$sp['service']['serviceIds'] = [ $active_service_id ];
+								return $sp;
+							},
+							$split_parcels
+						);
+					}
 					WC()->session->set( 'drushfo_shipping_data', $active_payload );
 				}
 
 				// Always add a SINGLE rate – service selection is handled in our custom UI
+				$rate_label = $this->title;
+				if ( $split_parcels ) {
+					/* translators: %d: number of parcels */
+					$rate_label .= ' (' . sprintf( _n( '%d parcel', '%d parcels', $split_count, 'drusoft-shipping-for-speedy' ), $split_count ) . ')';
+				}
 				$this->add_rate( [
 					'id'        => $this->get_rate_id(),
-					'label'     => $this->title,
+					'label'     => $rate_label,
 					'cost'      => number_format( $active_cost, 2, '.', '' ),
 					'meta_data' => [ 'speedy_service_id' => $active_service_id ],
 				] );
@@ -1952,6 +2070,56 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 		 */
 
 		/**
+		 * When set, pickup_sender_block()/payload building use THIS profile
+		 * instead of resolving from the cart (used for per-parcel payloads).
+		 *
+		 * @var string|null
+		 */
+		public $pickup_key_override = null;
+
+		/**
+		 * Group the current cart by resolved pickup profile.
+		 *
+		 * @return array<string, array{ids:int[],weight:float,subtotal:float,names:string[]}>
+		 */
+		public function split_cart_groups(): array {
+			$groups = [];
+			if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+				return $groups;
+			}
+			$profiles = $this->get_pickup_profiles();
+			$default  = $this->pickup_opt( 'pickup_default_profile', 'default' );
+			if ( ! isset( $profiles[ $default ] ) ) {
+				$default = 'default';
+			}
+			$fallback_weight = (float) apply_filters( 'drushfo_default_item_weight', 0.5 );
+			foreach ( WC()->cart->get_cart() as $item ) {
+				$pid = (int) ( $item['variation_id'] ?: $item['product_id'] );
+				$key = get_post_meta( $pid, '_drushfo_pickup_profile', true );
+				if ( ! $key && ( $parent = wp_get_post_parent_id( $pid ) ) ) {
+					$key = get_post_meta( $parent, '_drushfo_pickup_profile', true );
+				}
+				if ( ! $key || ! isset( $profiles[ $key ] ) ) {
+					$key = $default;
+				}
+				if ( ! isset( $groups[ $key ] ) ) {
+					$groups[ $key ] = [ 'ids' => [], 'weight' => 0.0, 'subtotal' => 0.0, 'names' => [] ];
+				}
+				$product = $item['data'];
+				$qty     = (int) $item['quantity'];
+				$w       = $product ? (float) $product->get_weight() : 0.0;
+				if ( $w <= 0 ) {
+					$w = $fallback_weight;
+				}
+				$groups[ $key ]['ids'][]     = $pid;
+				$groups[ $key ]['weight']   += $w * $qty;
+				$groups[ $key ]['subtotal'] += (float) ( $item['line_subtotal'] ?? 0 ) + (float) ( $item['line_subtotal_tax'] ?? 0 );
+				$groups[ $key ]['names'][]   = ( $product ? $product->get_name() : ( 'product#' . $pid ) ) . ' x' . $qty;
+			}
+			return $groups;
+		}
+
+		/**
 		 * Instance-settings reader safe to call while form fields are still
 		 * being built (get_option() can't resolve instance settings for keys
 		 * not yet registered — same chicken-and-egg as sender_city above).
@@ -2105,7 +2273,9 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					$cart_product_ids[] = (int) ( $cart_item['variation_id'] ?: $cart_item['product_id'] );
 				}
 			}
-			$pickup_key = $this->resolve_pickup_profile_key( $cart_product_ids );
+			$pickup_key = null !== $this->pickup_key_override
+				? $this->pickup_key_override
+				: $this->resolve_pickup_profile_key( $cart_product_ids );
 			$sender     = $this->pickup_sender_block( $pickup_key );
 
 			// If no sender data was set, send empty object so JSON encodes as {}
