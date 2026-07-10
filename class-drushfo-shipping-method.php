@@ -520,12 +520,22 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					'placeholder' => "warehouse2 | Склад Изток | object:123456789 | Иван Иванов | 0888123456\nsupplier1 | Доставчик X | office:14 | Петър Петров | 0888654321",
 					'description' => __( 'One per line: key | label | office:&lt;office id&gt; OR object:&lt;Speedy client/object id&gt; | contact person | phone. Objects are pickup addresses registered on your Speedy contract (MySpeedy → Objects); offices are drop-off Speedy offices.', 'drusoft-shipping-for-speedy' ),
 				],
+				'pickup_default_profile' => [
+					'title'       => __( 'Default Pickup Point', 'drusoft-shipping-for-speedy' ),
+					'type'        => 'select',
+					'default'     => 'default',
+					'options'     => array_map(
+						static fn( $p ) => $p['label'],
+						$this->get_pickup_profiles()
+					),
+					'description' => __( 'Used for products without an explicit pickup-point assignment.', 'drusoft-shipping-for-speedy' ),
+				],
 				'pickup_mixed_policy' => [
 					'title'       => __( 'Mixed-cart Pickup Policy', 'drusoft-shipping-for-speedy' ),
 					'type'        => 'select',
 					'default'     => 'default_profile',
 					'options'     => [
-						'default_profile' => __( 'Use the default sender', 'drusoft-shipping-for-speedy' ),
+						'default_profile' => __( 'Use the default pickup point', 'drusoft-shipping-for-speedy' ),
 						'first_item'      => __( 'Use the first item\'s pickup point', 'drusoft-shipping-for-speedy' ),
 					],
 					'description' => __( 'Which origin to use when cart items are assigned to different pickup points.', 'drusoft-shipping-for-speedy' ),
@@ -1936,13 +1946,17 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 		 */
 		public function resolve_pickup_profile_key( array $product_ids ): string {
 			$profiles = $this->get_pickup_profiles();
+			$default  = (string) $this->get_option( 'pickup_default_profile', 'default' );
+			if ( ! isset( $profiles[ $default ] ) ) {
+				$default = 'default';
+			}
 			$assigned = [];
 			foreach ( $product_ids as $pid ) {
 				$key = get_post_meta( $pid, '_drushfo_pickup_profile', true );
 				if ( ! $key && ( $parent = wp_get_post_parent_id( $pid ) ) ) {
 					$key = get_post_meta( $parent, '_drushfo_pickup_profile', true );
 				}
-				$assigned[] = ( $key && isset( $profiles[ $key ] ) ) ? $key : 'default';
+				$assigned[] = ( $key && isset( $profiles[ $key ] ) ) ? $key : $default;
 			}
 			$unique = array_values( array_unique( $assigned ) );
 			if ( 1 === count( $unique ) ) {
@@ -1950,7 +1964,7 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 			} elseif ( 'first_item' === $this->get_option( 'pickup_mixed_policy', 'default_profile' ) ) {
 				$resolved = $assigned[0];
 			} else {
-				$resolved = 'default';
+				$resolved = $default;
 			}
 			/**
 			 * Filter the resolved pickup profile key.
