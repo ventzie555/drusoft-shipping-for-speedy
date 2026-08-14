@@ -55,7 +55,7 @@ if ( ! in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins',
  */
 define( 'DRUSHFO_PATH', plugin_dir_path( __FILE__ ) );
 define( 'DRUSHFO_URL',  plugin_dir_url( __FILE__ ) );
-define( 'DRUSHFO_VER',  '1.0.9' );
+define( 'DRUSHFO_VER',  '1.1.0' );
 
 /**
  * Load Dependencies
