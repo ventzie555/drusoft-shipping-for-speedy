@@ -672,6 +672,18 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 						'YES' => __( 'Yes', 'drusoft-shipping-for-speedy' ),
 					],
 				],
+				'obpd_option' => [
+					'title'       => __( 'Inspection before payment', 'drusoft-shipping-for-speedy' ),
+					'type'        => 'select',
+					'default'     => 'NONE',
+					'description' => __( 'Let the recipient inspect (or test) the goods before paying the COD amount. Not available for APT (automat) deliveries. Return shipment on refusal is at your expense.', 'drusoft-shipping-for-speedy' ),
+					'desc_tip'    => true,
+					'options'     => [
+						'NONE' => __( 'No', 'drusoft-shipping-for-speedy' ),
+						'OPEN' => __( 'Inspection (open before payment)', 'drusoft-shipping-for-speedy' ),
+						'TEST' => __( 'Inspection and test', 'drusoft-shipping-for-speedy' ),
+					],
+				],
 				'special_requirements' => [
 					'title'    => __( 'Special Requirements', 'drusoft-shipping-for-speedy' ),
 					'type'     => 'select',

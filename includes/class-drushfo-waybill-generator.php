@@ -145,6 +145,21 @@ if ( ! class_exists( 'Drushfo_Waybill_Generator' ) ) {
 				unset( $payload['service']['serviceIds'] );
 			}
 
+			// Inspection before payment (OBPD). Injected at waybill time — like the
+			// COD amount above — so the merchant's current setting applies even to
+			// orders checked out before the option existed. Only meaningful on COD
+			// shipments, and impossible at automats (no staff to open with).
+			$obpd = (string) ( $settings['obpd_option'] ?? 'NONE' );
+			if ( in_array( $obpd, [ 'OPEN', 'TEST' ], true )
+				&& isset( $payload['service']['additionalServices']['cod'] )
+				&& 'automat' !== $order->get_meta( '_drushfo_delivery_type' ) ) {
+				$payload['service']['additionalServices']['obpd'] = [
+					'option'                  => $obpd,
+					'returnShipmentServiceId' => (int) ( $payload['service']['serviceId'] ?? 505 ),
+					'returnShipmentPayer'     => 'SENDER',
+				];
+			}
+
 			// Add package type to content (only needed for shipment, not calculate)
 			if ( ! isset( $payload['content']['package'] ) ) {
 				$payload['content']['package'] = $settings['opakovka'] ?? 'BOX';
@@ -240,6 +255,17 @@ if ( ! class_exists( 'Drushfo_Waybill_Generator' ) ) {
 					if ( 'PALLET' === $parcel['content']['package'] && isset( $parcel['recipient']['pickupOfficeId'] )
 						&& 'automat' === $order->get_meta( '_drushfo_delivery_type' ) ) {
 						$parcel['content']['package'] = 'BOX';
+					}
+					// Same inspection-before-payment rule as the primary parcel:
+					// a customer must get identical treatment on every box of one order.
+					if ( in_array( $obpd, [ 'OPEN', 'TEST' ], true )
+						&& isset( $parcel['service']['additionalServices']['cod'] )
+						&& 'automat' !== $order->get_meta( '_drushfo_delivery_type' ) ) {
+						$parcel['service']['additionalServices']['obpd'] = [
+							'option'                  => $obpd,
+							'returnShipmentServiceId' => (int) ( $parcel['service']['serviceId'] ?? 505 ),
+							'returnShipmentPayer'     => 'SENDER',
+						];
 					}
 					$parcel['recipient']['clientName']       = $order->get_formatted_shipping_full_name();
 					$parcel['recipient']['phone1']['number'] = $order->get_billing_phone();
