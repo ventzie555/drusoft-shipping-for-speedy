@@ -119,6 +119,24 @@ if ( ! class_exists( 'Drushfo_Waybill_Generator' ) ) {
 				}
 			}
 
+			// COD must be what the courier actually collects: the ORDER TOTAL.
+			// The saved payload was built during calculate_shipping(), where the
+			// cart's grand total does not exist yet, so it carries the items
+			// subtotal EX VAT — on order 15961 that shipped a 172.81 € COD as
+			// 141.66 € (VAT and shipping missing), quietly undercollecting more
+			// than the order's entire margin. At waybill time the truth is one
+			// call away, so impose it here instead of trusting the quote-time
+			// approximation. includeShippingPrice=true tells Speedy to add the
+			// courier price itself, so in that mode our shipping charge must
+			// stay out of the amount.
+			if ( isset( $payload['service']['additionalServices']['cod'] ) ) {
+				$cod_total = (float) $order->get_total();
+				if ( ! empty( $payload['service']['additionalServices']['cod']['includeShippingPrice'] ) ) {
+					$cod_total -= (float) $order->get_shipping_total() + (float) $order->get_shipping_tax();
+				}
+				$payload['service']['additionalServices']['cod']['amount'] = round( $cod_total, 2 );
+			}
+
 			// Convert calculate payload format to shipment format:
 			// The calculate endpoint uses service.serviceIds (array),
 			// but the shipment endpoint requires service.serviceId (single int).
