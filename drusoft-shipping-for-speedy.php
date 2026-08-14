@@ -451,6 +451,17 @@ function drushfo_enqueue_scripts(): void {
 			'alert_select_city' => __( 'Please select a city first.', 'drusoft-shipping-for-speedy' ),
 			'no_results'       => __( 'No results', 'drusoft-shipping-for-speedy' ),
 			'select_service'   => __( 'Select Service', 'drusoft-shipping-for-speedy' ),
+			'map_title_office'  => __( 'Pick a Speedy office', 'drusoft-shipping-for-speedy' ),
+			'map_title_automat' => __( 'Pick a Speedy automat', 'drusoft-shipping-for-speedy' ),
+			'map_hint'          => __( 'Click a marker, then choose "Select" in the popup.', 'drusoft-shipping-for-speedy' ),
+			'map_pick'          => __( 'Select this point', 'drusoft-shipping-for-speedy' ),
+			'map_error'         => __( 'Map could not be loaded:', 'drusoft-shipping-for-speedy' ),
+			'map_filter_office'  => __( 'Offices', 'drusoft-shipping-for-speedy' ),
+			'map_filter_automat' => __( 'Automats', 'drusoft-shipping-for-speedy' ),
+			'map_filter_both'    => __( 'Both', 'drusoft-shipping-for-speedy' ),
+			'map_search_placeholder' => __( 'Search by office name or address…', 'drusoft-shipping-for-speedy' ),
+			'map_results_count'      => __( '{n} results', 'drusoft-shipping-for-speedy' ),
+			'map_search_no_results'  => __( 'No matches', 'drusoft-shipping-for-speedy' ),
 		)
 	);
 
@@ -465,10 +476,30 @@ function drushfo_enqueue_scripts(): void {
 	);
 
 	if ( is_checkout() ) {
+		// Own office/automat map (Leaflet, bundled locally — never a CDN). Replaces
+		// the Speedy-hosted office_locator iframe, whose office popup renders wider
+		// than a phone-sized frame and clips its select button out of reach.
+		wp_enqueue_script(
+			'drushfo-map',
+			DRUSHFO_URL . 'assets/js/map.js',
+			array( 'jquery', 'drushfo-common' ),
+			DRUSHFO_VER,
+			true
+		);
+		wp_localize_script(
+			'drushfo-map',
+			'drushfo_map_cfg',
+			array(
+				'leaflet_css'    => DRUSHFO_URL . 'assets/vendor/leaflet/leaflet.css',
+				'leaflet_js'     => DRUSHFO_URL . 'assets/vendor/leaflet/leaflet.js',
+				'leaflet_images' => DRUSHFO_URL . 'assets/vendor/leaflet/images/',
+			)
+		);
+
 		wp_enqueue_script(
 			'drushfo-checkout',
 			DRUSHFO_URL . 'assets/js/checkout.js',
-			array( 'jquery', 'select2', 'drushfo-common' ),
+			array( 'jquery', 'select2', 'drushfo-common', 'drushfo-map' ),
 			DRUSHFO_VER,
 			true
 		);
@@ -1267,11 +1298,12 @@ function drushfo_check_availability_ajax(): void {
 
 	global $wpdb;
 
-	// Fetch all offices/automats for this city
+	// Fetch all offices/automats for this city. Coordinates feed the own-map
+	// picker (assets/js/map.js) so it can plot markers without a second call.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$results = $wpdb->get_results(
 		$wpdb->prepare(
-			"SELECT id, name, address, office_type FROM {$wpdb->prefix}drushfo_offices WHERE city_id = %d ORDER BY name ASC",
+			"SELECT id, name, address, office_type, latitude, longitude FROM {$wpdb->prefix}drushfo_offices WHERE city_id = %d ORDER BY name ASC",
 			$city_id
 		)
 	);
@@ -1281,8 +1313,18 @@ function drushfo_check_availability_ajax(): void {
 
 	foreach ( $results as $row ) {
 		$item = [
-			'id'    => $row->id,
-			'label' => sprintf( '%s %s - %s', $row->id, $row->name, $row->address )
+			'id'      => $row->id,
+			'label'   => sprintf( '%s %s - %s', $row->id, $row->name, $row->address ),
+			'name'    => $row->name,
+			'address' => $row->address,
+			// The office syncer stores Speedy's location.x/location.y straight
+			// into latitude/longitude — but x IS the longitude and y the
+			// latitude, so the columns hold each other's values (Haskovo sits
+			// in the DB as lat 25.55, which is Saudi Arabia). Swap on read;
+			// fixing the syncer requires a table migration for every install,
+			// which belongs in its own release.
+			'lat'     => (float) $row->longitude,
+			'lng'     => (float) $row->latitude,
 		];
 
 		if ( drushfo_is_automat( $row->office_type, $row->name ) ) {

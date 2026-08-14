@@ -535,3 +535,36 @@ msgstr "Проследи пратката при Спиди"
 msgid "Speedy"
 msgstr "Спиди"
 
+
+msgid "Pick a Speedy office"
+msgstr "Изберете офис на Спиди"
+
+msgid "Pick a Speedy automat"
+msgstr "Изберете автомат на Спиди"
+
+msgid "Click a marker, then choose \"Select\" in the popup."
+msgstr "Цъкнете върху маркер и после „Избери“ в прозорчето."
+
+msgid "Select this point"
+msgstr "Избери"
+
+msgid "Map could not be loaded:"
+msgstr "Картата не можа да се зареди:"
+
+msgid "Offices"
+msgstr "Офиси"
+
+msgid "Automats"
+msgstr "Автомати"
+
+msgid "Both"
+msgstr "Всички"
+
+msgid "Search by office name or address…"
+msgstr "Търсене по име на офис или адрес…"
+
+msgid "{n} results"
+msgstr "{n} резултата"
+
+msgid "No matches"
+msgstr "Няма съвпадения"

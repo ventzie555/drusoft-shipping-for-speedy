@@ -1152,24 +1152,75 @@
             $(document.body).trigger('update_checkout');
         }
 
+        /**
+         * Own Leaflet office map (assets/js/map.js). Replaces the Speedy-hosted
+         * office_locator iframe: its office popup renders wider than a phone-sized
+         * frame and clips the select button beyond the right edge — unreachable,
+         * because a cross-origin iframe cannot be restyled or panned from outside.
+         * Points come from the same availability payload that fills the dropdown,
+         * so the map needs no extra request and is always in sync with it.
+         */
         function openSpeedyMap() {
             const cityId = $('#' + currentContext + '_city').val();
-            let cityName = $('#' + currentContext + '_city option:selected').text();
-            
-            if (cityName) {
-                cityName = cityName.replace(/^(гр\.|с\.|к\.|к\.к\.|в\.с\.)\s+/i, ''); 
-                cityName = cityName.replace(/\s*\(\d+\)$/, ''); 
-            }
 
             if (!cityId) {
                 alert(params.i18n.alert_select_city);
                 return;
             }
+            if (!window.DrushfoMap) return;
 
-            const url = 'https://services.speedy.bg/office_locator_widget_v3/office_locator.php?lang=bg&showAddressForm=0&showOfficesList=0&selectOfficeButtonCaption=' + encodeURIComponent('Избери') + '&siteName=' + encodeURIComponent(cityName);
-            
-            $speedyMapFrame.attr('src', url);
-            $speedyMapModal.show();
+            const currentType = $('input[name="speedy_delivery_type"]:checked').val() || 'office';
+
+            loadAvailability(cityId, function(data) {
+                if (!data) return;
+                const points = [];
+                (data.offices || []).forEach(function(o) {
+                    points.push({ id: o.id, name: o.name || o.label, address: o.address || '', office_type: 'OFFICE', lat: o.lat, lng: o.lng });
+                });
+                (data.automats || []).forEach(function(o) {
+                    // map.js filters automats on the Econt-style 'APS' marker type
+                    points.push({ id: o.id, name: o.name || o.label, address: o.address || '', office_type: 'APS', lat: o.lat, lng: o.lng });
+                });
+
+                window.DrushfoMap.open(points, function(point) {
+                    const targetType = (point.office_type === 'APS') ? 'automat' : 'office';
+                    const $radio = $('input[name="speedy_delivery_type"][value="' + targetType + '"]');
+                    if ($radio.length && !$radio.prop('checked')) {
+                        $radio.prop('checked', true).trigger('change');
+                    }
+                    // The office select repopulates after a type switch — retry
+                    // briefly until the picked option exists, then commit it.
+                    let tries = 0;
+                    (function commit() {
+                        const $sel = $('#speedy_office_id');
+                        if ($sel.length && $sel.find('option[value="' + point.id + '"]').length) {
+                            $sel.val(String(point.id)).trigger('change');
+                            return;
+                        }
+                        if (++tries < 15) setTimeout(commit, 200);
+                    })();
+                }, {
+                    title:         (targetTitle(currentType)),
+                    hint:          params.i18n.map_hint,
+                    pickLabel:     params.i18n.map_pick,
+                    errorLabel:    params.i18n.map_error,
+                    defaultFilter: (currentType === 'automat') ? 'automat' : 'office',
+                    i18n: {
+                        offices:            params.i18n.map_filter_office,
+                        automats:           params.i18n.map_filter_automat,
+                        both:               params.i18n.map_filter_both,
+                        search_placeholder: params.i18n.map_search_placeholder,
+                        results_count:      params.i18n.map_results_count,
+                        search_no_results:  params.i18n.map_search_no_results,
+                    },
+                });
+            });
+
+            function targetTitle(type) {
+                return (type === 'automat')
+                    ? (params.i18n.map_title_automat || params.i18n.select_from_map)
+                    : (params.i18n.map_title_office || params.i18n.select_from_map);
+            }
         }
 
         // ── Street Autocomplete ──
