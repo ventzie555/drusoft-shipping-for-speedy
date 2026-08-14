@@ -130,3 +130,34 @@
     border: 0;
     border-radius: 0 0 5px 5px;
 }
+
+/* Mobile: the Speedy office-locator widget draws its office popup WIDER than
+   a phone-sized iframe, and the red "Select" button lands beyond the right
+   edge — unreachable, since the popup cannot be panned inside the iframe
+   (reported on a real order attempt, 14.08.2026). The widget is hosted by
+   Speedy, so the only lever we own is the iframe's size: go full-screen on
+   small viewports to give the popup the room it assumes. */
+@media (max-width: 640px) {
+    .speedy-modal-content {
+        margin: 0;
+        width: 100%;
+        max-width: none;
+        height: 100%;
+        border: 0;
+        border-radius: 0;
+    }
+    .speedy-modal-body iframe {
+        border-radius: 0;
+    }
+}
+
+/* Phones: hide the map picker button entirely. The Speedy-hosted widget's
+   office popup is wider than any phone-sized iframe and its select button
+   lands unreachable beyond the right edge; its list mode ignores the city
+   filter. The office dropdown (search-enabled) is the mobile selection path.
+   Desktop keeps the map, where the popup fits. */
+@media (max-width: 640px) {
+    #speedy-open-map {
+        display: none;
+    }
+}

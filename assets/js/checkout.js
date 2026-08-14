@@ -1166,7 +1166,7 @@
                 return;
             }
 
-            const url = 'https://services.speedy.bg/office_locator_widget_v3/office_locator.php?lang=bg&showAddressForm=0&showOfficesList=0&selectOfficeButtonCaption=Select&siteName=' + encodeURIComponent(cityName);
+            const url = 'https://services.speedy.bg/office_locator_widget_v3/office_locator.php?lang=bg&showAddressForm=0&showOfficesList=0&selectOfficeButtonCaption=' + encodeURIComponent('Избери') + '&siteName=' + encodeURIComponent(cityName);
             
             $speedyMapFrame.attr('src', url);
             $speedyMapModal.show();
