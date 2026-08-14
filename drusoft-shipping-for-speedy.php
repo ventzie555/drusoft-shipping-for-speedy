@@ -3,7 +3,7 @@
  * Plugin Name: Drusoft Shipping for Speedy
  * Plugin URI:  https://github.com/ventzie555/drusoft-shipping-for-speedy
  * Description: A clean, conflict-free Speedy integration for Bulgaria.
- * Version:     1.0.9
+ * Version:     1.1.0
  * Author:      DRUSOFT LTD
  * Author URI:  https://drusoft.dev/
  * Text Domain: drusoft-shipping-for-speedy
