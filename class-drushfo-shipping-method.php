@@ -2339,12 +2339,17 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 			// ── Payment ──
 			$include_shipping_in_cod = ( 'YES' === $this->get_option( 'includeshippingprice' ) );
 
-			// Old plugin logic: payer is RECIPIENT only when ALL of:
+			// Payer is RECIPIENT only when ALL of:
 			//   1. COD payment
 			//   2. includeshippingprice is not YES
 			//   3. cenadostavka is 'speedycalculator' or 'nadbavka' (pure API pricing)
 			// For all other pricing modes (fileprices, fixedprices, freeshipping)
-			// or when includeshippingprice is YES, use SENDER — matching old plugin.
+			// or when includeshippingprice is YES, use SENDER.
+			//
+			// This runs while quoting, before anyone knows what the cart will
+			// actually be charged for shipping, so it can only ever be a guess.
+			// The binding decision is re-made against the saved order in
+			// DRUSHFO_Waybill_Generator::resolve_courier_service_payer().
 			$cenadostavka_mode = $this->get_option( 'cenadostavka', 'speedycalculator' );
 			$api_pricing_modes = [ 'speedycalculator', 'nadbavka' ];
 

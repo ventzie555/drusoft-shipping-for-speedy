@@ -137,6 +137,26 @@ if ( ! class_exists( 'Drushfo_Waybill_Generator' ) ) {
 				$payload['service']['additionalServices']['cod']['amount'] = round( $cod_total, 2 );
 			}
 
+			// Who pays the courier — settled here for the same reason as the COD
+			// amount above: the quote-time guess cannot see what the cart ended
+			// up charging for delivery.
+			//
+			// Billing the recipient is only honest when the order charged them
+			// nothing for shipping. Any shipping line means the customer has
+			// already paid us for delivery, and handing Speedy's fee to them as
+			// well makes them pay for it twice — once at checkout, once at the
+			// counter, with no warning on either side.
+			//
+			// That is not hypothetical. Order 15961 totalled 172.81 € including
+			// 2.82 € of shipping; Speedy then billed the customer a further
+			// 4.48 € on collection and mailed him a demand for 177.29 €. He
+			// queried it. Two earlier customers had already paid the surcharge
+			// and said nothing.
+			if ( (float) $order->get_shipping_total() > 0
+				&& 'RECIPIENT' === ( $payload['payment']['courierServicePayer'] ?? '' ) ) {
+				$payload['payment']['courierServicePayer'] = 'SENDER';
+			}
+
 			// Convert calculate payload format to shipment format:
 			// The calculate endpoint uses service.serviceIds (array),
 			// but the shipment endpoint requires service.serviceId (single int).
@@ -245,6 +265,14 @@ if ( ! class_exists( 'Drushfo_Waybill_Generator' ) ) {
 					$parcel_no++;
 					$parcel['userName'] = $username;
 					$parcel['password'] = $password;
+					// Secondary parcels carry their own quote-time payload, so the
+					// courier-payer correction applied to the primary above has to
+					// be repeated here — otherwise a split order would hand the
+					// customer a counter charge on every parcel but the first.
+					if ( (float) $order->get_shipping_total() > 0
+						&& 'RECIPIENT' === ( $parcel['payment']['courierServicePayer'] ?? '' ) ) {
+						$parcel['payment']['courierServicePayer'] = 'SENDER';
+					}
 					if ( isset( $parcel['service']['serviceIds'] ) && is_array( $parcel['service']['serviceIds'] ) ) {
 						$parcel['service']['serviceId'] = $parcel['service']['serviceIds'][0];
 						unset( $parcel['service']['serviceIds'] );

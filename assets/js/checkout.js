@@ -1171,16 +1171,18 @@
 
             const currentType = $('input[name="speedy_delivery_type"]:checked').val() || 'office';
 
-            loadAvailability(cityId, function(data) {
-                if (!data) return;
-                const points = [];
-                (data.offices || []).forEach(function(o) {
-                    points.push({ id: o.id, name: o.name || o.label, address: o.address || '', office_type: 'OFFICE', lat: o.lat, lng: o.lng });
-                });
-                (data.automats || []).forEach(function(o) {
-                    // map.js filters automats on the Econt-style 'APS' marker type
-                    points.push({ id: o.id, name: o.name || o.label, address: o.address || '', office_type: 'APS', lat: o.lat, lng: o.lng });
-                });
+            // Coordinates are fetched HERE, on the click, not with the dropdown:
+            // shipping the map payload alongside every city change made Sofia's
+            // availability response 226 KB and stalled the checkout on mobile
+            // data for everyone, including the ~90% who never open the map.
+            $.ajax({
+                url: params.ajax_url,
+                type: 'POST',
+                data: { action: 'drushfo_map_points', nonce: params.nonce, city_id: cityId },
+                success: function(response) {
+                    if (!response || !response.success) return;
+                    const points = response.data || [];
+                    if (!points.length) return;
 
                 window.DrushfoMap.open(points, function(point) {
                     const targetType = (point.office_type === 'APS') ? 'automat' : 'office';
@@ -1214,6 +1216,7 @@
                         search_no_results:  params.i18n.map_search_no_results,
                     },
                 });
+                }
             });
 
             function targetTitle(type) {

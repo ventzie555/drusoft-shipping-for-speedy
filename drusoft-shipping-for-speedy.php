@@ -1298,12 +1298,17 @@ function drushfo_check_availability_ajax(): void {
 
 	global $wpdb;
 
-	// Fetch all offices/automats for this city. Coordinates feed the own-map
-	// picker (assets/js/map.js) so it can plot markers without a second call.
+	// Dropdown payload only — id + label, nothing else. This response is fetched
+	// the moment a city is chosen, i.e. mid-checkout on a phone, so its size is
+	// felt directly: carrying the map's name/address/lat/lng for every office
+	// (added 14.08 with the own-map picker) grew Sofia's 320 offices from ~48 KB
+	// to 226 KB, several seconds of dead screen on mobile data at exactly the
+	// step where a customer is deciding whether we are worth the trouble. Map
+	// coordinates now load on demand, see drushfo_map_points_ajax().
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$results = $wpdb->get_results(
 		$wpdb->prepare(
-			"SELECT id, name, address, office_type, latitude, longitude FROM {$wpdb->prefix}drushfo_offices WHERE city_id = %d ORDER BY name ASC",
+			"SELECT id, name, address, office_type FROM {$wpdb->prefix}drushfo_offices WHERE city_id = %d ORDER BY name ASC",
 			$city_id
 		)
 	);
@@ -1313,18 +1318,8 @@ function drushfo_check_availability_ajax(): void {
 
 	foreach ( $results as $row ) {
 		$item = [
-			'id'      => $row->id,
-			'label'   => sprintf( '%s %s - %s', $row->id, $row->name, $row->address ),
-			'name'    => $row->name,
-			'address' => $row->address,
-			// The office syncer stores Speedy's location.x/location.y straight
-			// into latitude/longitude — but x IS the longitude and y the
-			// latitude, so the columns hold each other's values (Haskovo sits
-			// in the DB as lat 25.55, which is Saudi Arabia). Swap on read;
-			// fixing the syncer requires a table migration for every install,
-			// which belongs in its own release.
-			'lat'     => (float) $row->longitude,
-			'lng'     => (float) $row->latitude,
+			'id'    => $row->id,
+			'label' => sprintf( '%s %s - %s', $row->id, $row->name, $row->address ),
 		];
 
 		if ( drushfo_is_automat( $row->office_type, $row->name ) ) {
@@ -1346,6 +1341,50 @@ function drushfo_check_availability_ajax(): void {
  * AJAX Handler: Get region code by city ID.
  * Used when selecting an office from the map in a different city.
  */
+/**
+ * Map points for one city — the heavy half of the old availability payload,
+ * fetched only when the customer actually opens the map picker.
+ */
+add_action( 'wp_ajax_drushfo_map_points', 'drushfo_map_points_ajax' );
+add_action( 'wp_ajax_nopriv_drushfo_map_points', 'drushfo_map_points_ajax' );
+
+function drushfo_map_points_ajax(): void {
+	check_ajax_referer( 'drushfo_public', 'nonce' );
+
+	$city_id = isset( $_POST['city_id'] ) ? absint( $_POST['city_id'] ) : 0;
+	if ( ! $city_id ) {
+		wp_send_json_error( __( 'Missing city ID', 'drusoft-shipping-for-speedy' ) );
+	}
+
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$rows = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT id, name, address, office_type, latitude, longitude FROM {$wpdb->prefix}drushfo_offices WHERE city_id = %d ORDER BY name ASC",
+			$city_id
+		)
+	);
+
+	$points = [];
+	foreach ( $rows as $row ) {
+		$points[] = [
+			'id'          => $row->id,
+			'name'        => $row->name,
+			'address'     => $row->address,
+			// The office syncer stores Speedy's location.x/location.y straight
+			// into latitude/longitude — but x IS the longitude and y the
+			// latitude, so the columns hold each other's values (Haskovo sits
+			// in the DB as lat 25.55, which is Saudi Arabia). Swap on read;
+			// fixing the syncer requires a table migration for every install,
+			// which belongs in its own release.
+			'lat'         => (float) $row->longitude,
+			'lng'         => (float) $row->latitude,
+			'office_type' => drushfo_is_automat( $row->office_type, $row->name ) ? 'APS' : 'OFFICE',
+		];
+	}
+	wp_send_json_success( $points );
+}
+
 add_action( 'wp_ajax_drushfo_get_region_by_city', 'drushfo_get_region_by_city_ajax' );
 add_action( 'wp_ajax_nopriv_drushfo_get_region_by_city', 'drushfo_get_region_by_city_ajax' );
 
