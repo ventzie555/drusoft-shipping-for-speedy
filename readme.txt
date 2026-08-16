@@ -3,7 +3,7 @@ Contributors: ventzie
 Tags: woocommerce, shipping, speedy, bulgaria, delivery
 Requires at least: 6.0
 Tested up to: 7.0
-Stable tag: 1.0.9
+Stable tag: 1.1.1
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -150,6 +150,14 @@ The plugin minimizes API calls through several strategies:
 * **Session storage** — Cart selections (city, delivery type, office) are stored in the WooCommerce session, so shipping calculations reuse the customer's choices without extra lookups.
 
 == Changelog ==
+
+= 1.1.1 =
+* Important fix: on cash-on-delivery orders the courier fee could be charged to the customer at the counter even though the order had already charged them for shipping — so they paid for delivery twice, with no warning at checkout. The fee is now billed to the merchant whenever the order carries a shipping charge. Stores that offer free shipping are unaffected. If you ship COD and charge for delivery, please update.
+* New: office and automat picking now uses a map bundled with the plugin instead of the Speedy-hosted locator. The old locator could not be used on a phone — its selection button fell outside the visible area — so mobile customers had no way to choose an office from the map.
+* Fixed: the office list sent to the checkout no longer carries map coordinates for every location. In Sofia that was 226 KB on a field most customers never open; the map now loads its data only when opened.
+
+= 1.1.0 =
+* Important fix: the cash-on-delivery (COD) amount sent to Speedy now equals the full order total (incl. VAT and shipping). Previously the waybill carried the items subtotal excluding VAT, so the courier collected less than the order total. If you ship COD, please update.
 
 = 1.0.9 =
 * Fixed: switching the shipping method to another courier via keyboard (arrow keys on the radio group), assistive technology or a script left this plugin's city dropdown active under the other courier, with Speedy city IDs the other courier could misread. The cleanup that previously ran only on mouse clicks now also runs for those switches.
