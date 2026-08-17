@@ -129,6 +129,24 @@ if ( ! class_exists( 'Drushfo_Waybill_Generator' ) ) {
 			// approximation. includeShippingPrice=true tells Speedy to add the
 			// courier price itself, so in that mode our shipping charge must
 			// stay out of the amount.
+			// A COD order whose payload carries no COD service at all is the
+			// worse variant of the same staleness: the quote was built while a
+			// CARD method was selected (the checkout default) and the customer
+			// switched to наложен платеж at the end. The rebuild-on-payment-
+			// change trigger keys off the payer flipping RECIPIENT<->SENDER, so
+			// any configuration in which both methods resolve to the same payer
+			// suppresses it — order 16334 (171.99 €) got a waybill with no COD
+			// whatsoever, which the courier would have delivered for free.
+			// The order object is the truth: it says COD, the waybill says COD.
+			if ( 'cod' === $order->get_payment_method()
+				&& ! isset( $payload['service']['additionalServices']['cod'] ) ) {
+				$payload['service']['additionalServices']['cod'] = [
+					'processingType'        => ( 'YES' === ( $settings['moneytransfer'] ?? 'NO' ) )
+						? 'POSTAL_MONEY_TRANSFER' : 'CASH',
+					'ignoreIfNotApplicable' => true,
+				];
+			}
+
 			if ( isset( $payload['service']['additionalServices']['cod'] ) ) {
 				$cod_total = (float) $order->get_total();
 				if ( ! empty( $payload['service']['additionalServices']['cod']['includeShippingPrice'] ) ) {
@@ -155,6 +173,23 @@ if ( ! class_exists( 'Drushfo_Waybill_Generator' ) ) {
 			if ( (float) $order->get_shipping_total() > 0
 				&& 'RECIPIENT' === ( $payload['payment']['courierServicePayer'] ?? '' ) ) {
 				$payload['payment']['courierServicePayer'] = 'SENDER';
+			}
+
+			// With the merchant paying the courier, COD must be the plain order
+			// total and nothing else. includeShippingPrice asks Speedy to add
+			// ITS OWN courier price to the collected amount — meaningful only
+			// when the recipient pays the courier. Sent together with SENDER,
+			// Speedy treats the service as not applicable, and because the
+			// payload carries ignoreIfNotApplicable=true it DROPS COD silently
+			// rather than erroring: waybill 63707943299 (order 16334, 171.99 €)
+			// went out with no naложен платеж at all — the courier would have
+			// handed over the parcel without collecting a стотинка. Caught
+			// before pickup; this keeps the combination impossible.
+			if ( 'SENDER' === ( $payload['payment']['courierServicePayer'] ?? '' )
+				&& isset( $payload['service']['additionalServices']['cod'] ) ) {
+				unset( $payload['service']['additionalServices']['cod']['includeShippingPrice'] );
+				$payload['service']['additionalServices']['cod']['amount'] =
+					round( (float) $order->get_total(), 2 );
 			}
 
 			// Convert calculate payload format to shipment format:
@@ -272,6 +307,13 @@ if ( ! class_exists( 'Drushfo_Waybill_Generator' ) ) {
 					if ( (float) $order->get_shipping_total() > 0
 						&& 'RECIPIENT' === ( $parcel['payment']['courierServicePayer'] ?? '' ) ) {
 						$parcel['payment']['courierServicePayer'] = 'SENDER';
+					}
+					// Same COD sanitisation as the primary: includeShippingPrice
+					// together with SENDER makes Speedy silently drop the whole
+					// COD service (ignoreIfNotApplicable) — see order 16334.
+					if ( 'SENDER' === ( $parcel['payment']['courierServicePayer'] ?? '' )
+						&& isset( $parcel['service']['additionalServices']['cod'] ) ) {
+						unset( $parcel['service']['additionalServices']['cod']['includeShippingPrice'] );
 					}
 					if ( isset( $parcel['service']['serviceIds'] ) && is_array( $parcel['service']['serviceIds'] ) ) {
 						$parcel['service']['serviceId'] = $parcel['service']['serviceIds'][0];
