@@ -160,10 +160,15 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 			}
 
 				// 4. Save to order meta
-				$order->add_meta_data( '_drushfo_order_data', $session_data );
+				// update_meta_data(), never add_meta_data(): this runs on every
+				// save of the order, and add_ APPENDS a row each time instead
+				// of replacing it. Same defect found and fixed in the Econt
+				// plugin on 2026-08-20, where live orders had reached 21
+				// identical copies of a single key.
+				$order->update_meta_data( '_drushfo_order_data', $session_data );
 
 				if ( isset( $session_data['recipient']['pickupOfficeId'] ) ) {
-					$order->add_meta_data( '_drushfo_office_id', $session_data['recipient']['pickupOfficeId'] );
+					$order->update_meta_data( '_drushfo_office_id', $session_data['recipient']['pickupOfficeId'] );
 				}
 			}
 
@@ -191,7 +196,7 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 				if ( ! $row || empty( $row->name ) ) {
 					continue;
 				}
-				$order->add_meta_data( "_drushfo_{$addr}_city_id", (int) $value );
+				$order->update_meta_data( "_drushfo_{$addr}_city_id", (int) $value );
 				$order->$city_setter( $row->name );
 				if ( ! empty( $row->post_code ) ) {
 					$order->$pc_setter( $row->post_code );
