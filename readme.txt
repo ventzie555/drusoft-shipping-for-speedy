@@ -3,7 +3,7 @@ Contributors: ventzie
 Tags: woocommerce, shipping, speedy, bulgaria, delivery
 Requires at least: 6.0
 Tested up to: 7.0
-Stable tag: 1.1.2
+Stable tag: 1.1.3
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -151,6 +151,11 @@ The plugin minimizes API calls through several strategies:
 
 == Changelog ==
 
+= 1.1.3 =
+* New: when an order is placed but the delivery price could not be calculated (Speedy did not answer), the order is still accepted — you should not lose the sale — and an order note now tells you so, with the chosen office, so you see it in the order history before shipping. Previously such an order arrived with a 0.00 shipping line and nothing explaining why.
+* New: the daily refresh of offices and cities now makes sure it is scheduled on every normal page load, not only when the plugin is activated or its settings are saved from the admin screen. Shops set up with wp-cli or with settings written programmatically had no refresh at all and were quietly serving weeks-old office lists.
+* New: the settings screen shows when offices and cities were last refreshed from Speedy and when the next refresh is due, and warns if it is more than three days old.
+
 = 1.1.2 =
 * Important fix: a cash-on-delivery order could receive a waybill carrying no cash-on-delivery at all, so the courier would have handed the parcel over without collecting the money. It happened when the customer switched to наложен платеж at the last step, after the quote had been built for card payment, and again when the shop pays the courier fee itself. Both cases are now closed and the amount is taken from the order rather than from the stale quote.
 * Important fix: when the delivery-price call failed at checkout, the office the customer had picked was not saved on the order. The order still went through — correctly, you should not lose the sale — but it reached you marked "to office" with no office on it, and the waybill could not be created without phoning the customer. This affected every shop using WooCommerce's High-Performance Order Storage, which is the default for new installations.
@@ -219,6 +224,9 @@ The plugin minimizes API calls through several strategies:
 * Bulgarian (bg_BG) translation included.
 
 == Upgrade Notice ==
+
+= 1.1.3 =
+Recommended update. Orders placed without a calculated delivery price now carry an order note so you notice before shipping; the daily office/city refresh self-heals if it was never scheduled; the settings screen shows the last refresh time.
 
 = 1.1.2 =
 Important update. A cash-on-delivery order could go out with no cash-on-delivery on the waybill, meaning the courier would deliver without collecting payment. Also fixes the customer's chosen office being lost on High-Performance Order Storage shops.

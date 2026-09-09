@@ -58,14 +58,20 @@ class Drushfo_Syncer {
 
 		$creds = [ 'speedy_username' => $username, 'speedy_password' => $password ];
 
-		// Sync Cities
-		self::update_cities( $creds );
+		$cities  = self::update_cities( $creds );
+		$offices = self::update_offices( $creds );
 
-		// Sync Offices
-		self::update_offices( $creds );
+		// The moment both tables were refreshed from the API. An option write
+		// works regardless of who owns the uploads directory — the WC log does
+		// not: wc_get_logger() swallows a failed file write, so a missing log
+		// line proves nothing about whether this ran. This is what the settings
+		// screen shows, and what to trust when the log looks dead.
+		if ( $cities && $offices ) {
+			update_option( 'drushfo_last_sync', time(), false );
+		}
 	}
 
-	private static function update_cities( $settings ) {
+	private static function update_cities( $settings ): bool {
 		global $wpdb;
 		
 		$username = $settings['speedy_username'];
@@ -85,7 +91,7 @@ class Drushfo_Syncer {
 			if ( class_exists( 'WC_Logger' ) ) {
 				wc_get_logger()->error( __( 'Speedy Cities Sync Error: ', 'drusoft-shipping-for-speedy' ) . $response->get_error_message(), array( 'source' => 'drusoft-shipping-for-speedy' ) );
 			}
-			return;
+			return false;
 		}
 
 		$response = wp_remote_retrieve_body( $response );
@@ -93,7 +99,7 @@ class Drushfo_Syncer {
 		// Parse CSV
 		$lines = explode( "\n", $response );
 		if ( empty( $lines ) ) {
-			return;
+			return false;
 		}
 
 		// Get headers
@@ -135,9 +141,10 @@ class Drushfo_Syncer {
 		if ( class_exists( 'WC_Logger' ) ) {
 			wc_get_logger()->info( __( 'Speedy Cities Sync Completed. Count: ', 'drusoft-shipping-for-speedy' ) . $count, array( 'source' => 'drusoft-shipping-for-speedy' ) );
 		}
+		return $count > 0;
 	}
 
-	private static function update_offices( $settings ) {
+	private static function update_offices( $settings ): bool {
 		global $wpdb;
 		
 		$username = $settings['speedy_username'];
@@ -160,7 +167,7 @@ class Drushfo_Syncer {
 			if ( class_exists( 'WC_Logger' ) ) {
 				wc_get_logger()->error( __( 'Speedy Offices Sync Error: ', 'drusoft-shipping-for-speedy' ) . $response->get_error_message(), array( 'source' => 'drusoft-shipping-for-speedy' ) );
 			}
-			return;
+			return false;
 		}
 
 		$data = json_decode( wp_remote_retrieve_body( $response ), true );
@@ -196,7 +203,9 @@ class Drushfo_Syncer {
 			if ( class_exists( 'WC_Logger' ) ) {
 				wc_get_logger()->info( __( 'Speedy Offices Sync Completed. Count: ', 'drusoft-shipping-for-speedy' ) . count($data['offices']), array( 'source' => 'drusoft-shipping-for-speedy' ) );
 			}
+			return count( $data['offices'] ) > 0;
 		}
+		return false;
 	}
 
 	/**
