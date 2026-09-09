@@ -3,7 +3,7 @@ Contributors: ventzie
 Tags: woocommerce, shipping, speedy, bulgaria, delivery
 Requires at least: 6.0
 Tested up to: 7.0
-Stable tag: 1.1.1
+Stable tag: 1.1.2
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -151,6 +151,11 @@ The plugin minimizes API calls through several strategies:
 
 == Changelog ==
 
+= 1.1.2 =
+* Important fix: a cash-on-delivery order could receive a waybill carrying no cash-on-delivery at all, so the courier would have handed the parcel over without collecting the money. It happened when the customer switched to наложен платеж at the last step, after the quote had been built for card payment, and again when the shop pays the courier fee itself. Both cases are now closed and the amount is taken from the order rather than from the stale quote.
+* Important fix: when the delivery-price call failed at checkout, the office the customer had picked was not saved on the order. The order still went through — correctly, you should not lose the sale — but it reached you marked "to office" with no office on it, and the waybill could not be created without phoning the customer. This affected every shop using WooCommerce's High-Performance Order Storage, which is the default for new installations.
+* Fixed: the chosen office, delivery type and stored order data could be written as several repeated rows on one order instead of a single value that gets replaced.
+
 = 1.1.1 =
 * Important fix: on cash-on-delivery orders the courier fee could be charged to the customer at the counter even though the order had already charged them for shipping — so they paid for delivery twice, with no warning at checkout. The fee is now billed to the merchant whenever the order carries a shipping charge. Stores that offer free shipping are unaffected. If you ship COD and charge for delivery, please update.
 * New: office and automat picking now uses a map bundled with the plugin instead of the Speedy-hosted locator. The old locator could not be used on a phone — its selection button fell outside the visible area — so mobile customers had no way to choose an office from the map.
@@ -214,6 +219,9 @@ The plugin minimizes API calls through several strategies:
 * Bulgarian (bg_BG) translation included.
 
 == Upgrade Notice ==
+
+= 1.1.2 =
+Important update. A cash-on-delivery order could go out with no cash-on-delivery on the waybill, meaning the courier would deliver without collecting payment. Also fixes the customer's chosen office being lost on High-Performance Order Storage shops.
 
 = 1.0.5 =
 Recommended update. Fixes courier-switch issues when used alongside Drusoft Shipping for Econt, keeps each courier's checkout selection separate, and reloads cities correctly when the province is changed.
