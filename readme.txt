@@ -35,9 +35,9 @@ This plugin is currently **not compatible** with the WooCommerce Block Cart and 
 * **Advanced Order Management** — Dedicated metabox in the order edit screen, integrated waybill generation, and bulk actions for managing multiple Speedy orders.
 * **Clean Codebase** — Built with modern PHP standards and conflict-free architecture.
 
-= Also Ship via Econt? =
+= Also Ship via Econt or Sameday? =
 
-This plugin has a sibling for the **Econt** courier: [Drusoft Shipping for Econt](https://wordpress.org/plugins/drusoft-shipping-for-econt/). Both plugins share the same checkout UI, settings layout, and admin order-management screens — once you've learned one, the other feels familiar. Install both if your store supports delivery via either courier.
+This plugin has siblings for the other Bulgarian couriers: [Drusoft Shipping for Econt](https://wordpress.org/plugins/drusoft-shipping-for-econt/) and **Drusoft Shipping for Sameday** (offices, address delivery and easybox lockers; submitted to the plugin directory and available on [GitHub](https://github.com/ventzie555/drusoft-shipping-for-sameday) in the meantime). All three share the same checkout UI, settings layout, and admin order-management screens — once you've learned one, the others feel familiar. Install as many as your store delivers with; each keeps its own checkout selection.
 
 == Installation ==
 
