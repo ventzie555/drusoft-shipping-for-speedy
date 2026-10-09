@@ -568,3 +568,47 @@ msgstr "{n} резултата"
 
 msgid "No matches"
 msgstr "Няма съвпадения"
+
+#: class-drushfo-shipping-method.php
+msgid "Fallback prices"
+msgstr "Резервни цени"
+
+#: class-drushfo-shipping-method.php
+msgid "Charged when Speedy cannot be asked for a price (outage, refused quote) and this session has no earlier quote. The order then carries a note saying so. A cleared field means the default."
+msgstr "Прилагат се, когато Спиди не може да даде цена (прекъсване, отказана калкулация) и в сесията няма по-ранна цена. Поръчката получава бележка за това. Празно поле означава стойността по подразбиране."
+
+#: class-drushfo-shipping-method.php
+msgid "To address"
+msgstr "До адрес"
+
+#: class-drushfo-shipping-method.php
+msgid "To office"
+msgstr "До офис"
+
+#: class-drushfo-shipping-method.php
+msgid "To automat"
+msgstr "До автомат"
+
+#: class-drushfo-shipping-method.php
+msgid "Per kg above 3 kg"
+msgstr "На кг над 3 кг"
+
+#: class-drushfo-shipping-method.php
+msgid "Added for every started kilogram above 3 kg."
+msgstr "Добавя се за всеки започнат килограм над 3 кг."
+
+#: class-drushfo-shipping-method.php
+msgid "Speedy answered without a price"
+msgstr "Спиди отговори без цена"
+
+#: class-drushfo-shipping-method.php
+msgid "Speedy could not price one of the parcels"
+msgstr "Спиди не можа да изчисли една от пратките"
+
+#: class-drushfo-shipping-method.php
+msgid "Speedy is not answering; quotes are paused for two minutes."
+msgstr "Спиди не отговаря; калкулациите са спрени за две минути."
+
+#: class-drushfo-shipping-method.php
+msgid "Speedy did not quote this order; the delivery was charged from the fallback table or the last quote: %1$s. Speedy's last answer: %2$s"
+msgstr "Спиди не даде цена за тази поръчка; доставката е таксувана по резервната таблица или по последната цена: %1$s. Последен отговор на Спиди: %2$s"

@@ -238,6 +238,21 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 				if ( 'drushfo_speedy' !== $item->get_method_id() ) {
 					continue;
 				}
+				// Priced by the fallback table or the last quote (1.1.4): the
+				// customer was charged, the merchant should still know Speedy
+				// did not quote this order.
+				if ( 'fallback' === (string) $item->get_meta( 'priced_by' ) ) {
+					$fresh->add_order_note( sprintf(
+						/* translators: 1: amount charged, 2: Speedy's answer or the pause message. */
+						__( 'Speedy did not quote this order; the delivery was charged from the fallback table or the last quote: %1$s. Speedy\'s last answer: %2$s', 'drusoft-shipping-for-speedy' ),
+						wc_price( (float) $item->get_total() + (float) $item->get_total_tax() ),
+						(string) $item->get_meta( 'fallback_reason' ) ?: '—'
+					) );
+					$fresh->update_meta_data( '_drushfo_priced_by', 'fallback' );
+					$fresh->update_meta_data( '_drushfo_unpriced_noted', 1 );
+					$fresh->save();
+					return;
+				}
 				if ( empty( $item->get_meta( 'missing_address' ) ) ) {
 					return;
 				}
@@ -825,6 +840,36 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					'type'         => 'text', // Changed to text for JS handling
 					'class'        => 'speedy-file-input-wrapper', // Hook for JS
 					'description'  => __( 'Path to CSV file with custom prices', 'drusoft-shipping-for-speedy' ),
+				],
+				'section_fallback' => [
+					'title'       => __( 'Fallback prices', 'drusoft-shipping-for-speedy' ),
+					'type'        => 'title',
+					'description' => __( 'Charged when Speedy cannot be asked for a price (outage, refused quote) and this session has no earlier quote. The order then carries a note saying so. A cleared field means the default.', 'drusoft-shipping-for-speedy' ),
+				],
+				'fallback_address' => [
+					'title'   => __( 'To address', 'drusoft-shipping-for-speedy' ),
+					'type'    => 'number',
+					'default' => '4.30',
+					'custom_attributes' => [ 'step' => '0.01', 'min' => '0' ],
+				],
+				'fallback_office' => [
+					'title'   => __( 'To office', 'drusoft-shipping-for-speedy' ),
+					'type'    => 'number',
+					'default' => '3.60',
+					'custom_attributes' => [ 'step' => '0.01', 'min' => '0' ],
+				],
+				'fallback_automat' => [
+					'title'   => __( 'To automat', 'drusoft-shipping-for-speedy' ),
+					'type'    => 'number',
+					'default' => '2.50',
+					'custom_attributes' => [ 'step' => '0.01', 'min' => '0' ],
+				],
+				'fallback_per_kg' => [
+					'title'       => __( 'Per kg above 3 kg', 'drusoft-shipping-for-speedy' ),
+					'type'        => 'number',
+					'default'     => '0.50',
+					'custom_attributes' => [ 'step' => '0.01', 'min' => '0' ],
+					'description' => __( 'Added for every started kilogram above 3 kg.', 'drusoft-shipping-for-speedy' ),
 				],
 				'free_shipping' => [
 					'title'       => __( 'Free Shipping', 'drusoft-shipping-for-speedy' ),
@@ -1678,14 +1723,20 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					if ( $cache_hit ) {
 						$active_cost = $cached_service_options[ $selected_service ]['cost'];
 
-						$this->add_rate( [
+						$this->add_rate( $this->gross_rate_args( (float) $active_cost ) + [
 							'id'        => $this->get_rate_id(),
 							'label'     => $this->title,
-							'cost'      => number_format( (float) $active_cost, 2, '.', '' ),
-							'meta_data' => [ 'speedy_service_id' => $selected_service ],
+							'meta_data' => [ 'speedy_service_id' => $selected_service, 'priced_by' => 'api' ],
 						] );
 						return;
 					}
+				}
+
+				// Speedy stopped answering a moment ago: do not hold the checkout
+				// for the timeout on every keystroke, price from the table.
+				if ( $this->api_down() ) {
+					$this->fallback_rate( $delivery_type, $order_weight, __( 'Speedy is not answering; quotes are paused for two minutes.', 'drusoft-shipping-for-speedy' ) );
+					return;
 				}
 
 				// We need the Speedy API price — call the calculator.
@@ -1695,23 +1746,16 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 				$response = $this->call_speedy_calculate_api( $payload );
 
 				if ( is_wp_error( $response ) ) {
-					$fallback = WC()->session ? WC()->session->get( 'drushfo_shipping_cost', 0 ) : 0;
-					$this->add_rate( [
-						'id'    => $this->get_rate_id(),
-						'label' => $this->title,
-						'cost'  => number_format( (float) $fallback, 2, '.', '' ),
-					] );
+					if ( 'http_request_failed' === $response->get_error_code() ) {
+						$this->mark_api_down();
+					}
+					$this->fallback_rate( $delivery_type, $order_weight, $response->get_error_message() );
 					return;
 				}
 
 				// Check for top-level API error
 				if ( ! empty( $response['error'] ) ) {
-					$fallback = WC()->session ? WC()->session->get( 'drushfo_shipping_cost', 0 ) : 0;
-					$this->add_rate( [
-						'id'    => $this->get_rate_id(),
-						'label' => $this->title,
-						'cost'  => number_format( (float) $fallback, 2, '.', '' ),
-					] );
+					$this->fallback_rate( $delivery_type, $order_weight, (string) ( $response['error']['message'] ?? wp_json_encode( $response['error'] ) ) );
 					return;
 				}
 
@@ -1726,12 +1770,7 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 				}
 
 				if ( empty( $successful_calcs ) ) {
-					$fallback = WC()->session ? WC()->session->get( 'drushfo_shipping_cost', 0 ) : 0;
-					$this->add_rate( [
-						'id'    => $this->get_rate_id(),
-						'label' => $this->title,
-						'cost'  => number_format( (float) $fallback, 2, '.', '' ),
-					] );
+					$this->fallback_rate( $delivery_type, $order_weight, __( 'Speedy answered without a price', 'drusoft-shipping-for-speedy' ) );
 					return;
 				}
 
@@ -1744,12 +1783,7 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					$sp_payload['password'] = $password;
 					$sp_response = $this->call_speedy_calculate_api( $sp_payload );
 					if ( is_wp_error( $sp_response ) || ! empty( $sp_response['error'] ) || empty( $sp_response['calculations'] ) ) {
-						$fallback = WC()->session ? WC()->session->get( 'drushfo_shipping_cost', 0 ) : 0;
-						$this->add_rate( [
-							'id'    => $this->get_rate_id(),
-							'label' => $this->title,
-							'cost'  => number_format( (float) $fallback, 2, '.', '' ),
-						] );
+							$this->fallback_rate( $delivery_type, $order_weight, __( 'Speedy could not price one of the parcels', 'drusoft-shipping-for-speedy' ) );
 						return;
 					}
 					foreach ( $sp_response['calculations'] as $sp_calc ) {
@@ -1856,12 +1890,112 @@ if ( ! class_exists( 'Drushfo_Shipping_Method' ) ) {
 					/* translators: %d: number of parcels */
 					$rate_label .= ' (' . sprintf( _n( '%d parcel', '%d parcels', $split_count, 'drusoft-shipping-for-speedy' ), $split_count ) . ')';
 				}
-				$this->add_rate( [
+				if ( WC()->session ) {
+					WC()->session->set( 'drushfo_priced_by', 'api' );
+					WC()->session->set( 'drushfo_fallback_reason', '' );
+				}
+				$this->add_rate( $this->gross_rate_args( (float) $active_cost ) + [
 					'id'        => $this->get_rate_id(),
 					'label'     => $rate_label,
-					'cost'      => number_format( $active_cost, 2, '.', '' ),
-					'meta_data' => [ 'speedy_service_id' => $active_service_id ],
+					'meta_data' => [ 'speedy_service_id' => $active_service_id, 'priced_by' => 'api' ],
 				] );
+			}
+		}
+
+		/**
+		 * Speedy's amounts already contain VAT (its reply carries amount, vat
+		 * and total separately: 3.57 + 0.71 = 4.28). WooCommerce treats a
+		 * rate's cost as net and adds the shop's shipping tax on top, which
+		 * charged the customer VAT twice. Hand it the net part and the tax it
+		 * would compute, so the customer sees exactly what Speedy bills.
+		 *
+		 * @param float $gross Speedy's total.
+		 * @return array cost + taxes for add_rate().
+		 */
+		private function gross_rate_args( float $gross ): array {
+			$taxes = '';
+			$cost  = $gross;
+			if ( $gross > 0 && wc_tax_enabled() && 'taxable' === $this->tax_status ) {
+				$tax_rates = WC_Tax::get_shipping_tax_rates();
+				if ( $tax_rates ) {
+					$taxes = WC_Tax::calc_inclusive_tax( $gross, $tax_rates );
+					$cost  = $gross - array_sum( $taxes );
+				}
+			}
+			return [
+				'cost'  => number_format( $cost, 2, '.', '' ),
+				'taxes' => $taxes,
+			];
+		}
+
+		/**
+		 * The rate when Speedy could not price the parcel: the last price this
+		 * session saw when there is one, otherwise the fallback table. Up to
+		 * 1.1.3 a failed first quote produced a 0.00 rate with nothing logged
+		 * and no note — the order shipped free.
+		 *
+		 * @param string $type   address|office|automat.
+		 * @param float  $weight Parcel weight.
+		 * @param string $reason Speedy's answer or the transport error.
+		 */
+		private function fallback_rate( string $type, float $weight, string $reason ): void {
+			$last = WC()->session ? (float) WC()->session->get( 'drushfo_shipping_cost', 0 ) : 0.0;
+			$cost = $last > 0 ? $last : $this->fallback_price( $type, $weight );
+			if ( function_exists( 'wc_get_logger' ) ) {
+				wc_get_logger()->warning(
+					sprintf( 'Speedy calculate failed (%s), charging %s from %s: %s', $type, number_format( $cost, 2, '.', '' ), $last > 0 ? 'the last quote' : 'the fallback table', $reason ),
+					[ 'source' => 'drusoft-shipping-for-speedy' ]
+				);
+			}
+			if ( WC()->session ) {
+				WC()->session->set( 'drushfo_priced_by', 'fallback' );
+				WC()->session->set( 'drushfo_fallback_reason', $reason );
+			}
+			$this->add_rate( $this->gross_rate_args( $cost ) + [
+				'id'        => $this->get_rate_id(),
+				'label'     => $this->title,
+				'meta_data' => [ 'priced_by' => 'fallback', 'fallback_reason' => $reason ],
+			] );
+		}
+
+		/**
+		 * Price from the fallback table. A cleared field means the default,
+		 * not 0.00; a deliberate 0 stays 0.
+		 *
+		 * @param string $type   address|office|automat.
+		 * @param float  $weight Weight in kg.
+		 * @return float
+		 */
+		private function fallback_price( string $type, float $weight ): float {
+			$read = function ( string $key ): float {
+				$value = (string) $this->get_option( $key, '' );
+				if ( '' === trim( $value ) ) {
+					$fields = $this->get_instance_form_fields();
+					$value  = isset( $fields[ $key ] ) ? (string) $this->get_field_default( $fields[ $key ] ) : '0';
+				}
+				return (float) str_replace( ',', '.', $value );
+			};
+			$key  = in_array( $type, [ 'office', 'automat' ], true ) ? 'fallback_' . $type : 'fallback_address';
+			$base = $read( $key );
+			if ( $weight > 3 ) {
+				$base += ceil( $weight - 3 ) * $read( 'fallback_per_kg' );
+			}
+			return round( $base, 2 );
+		}
+
+		/** Whether quoting is paused because Speedy stopped answering. */
+		private function api_down(): bool {
+			return (bool) get_transient( 'drushfo_api_down' );
+		}
+
+		/** Pause quoting for two minutes after a transport failure. */
+		private function mark_api_down(): void {
+			if ( get_transient( 'drushfo_api_down' ) ) {
+				return;
+			}
+			set_transient( 'drushfo_api_down', time(), 2 * MINUTE_IN_SECONDS );
+			if ( function_exists( 'wc_get_logger' ) ) {
+				wc_get_logger()->warning( 'Speedy is not answering; the fallback table (or the last quote) prices every delivery for the next 2 minutes, then Speedy is asked again.', [ 'source' => 'drusoft-shipping-for-speedy' ] );
 			}
 		}
 

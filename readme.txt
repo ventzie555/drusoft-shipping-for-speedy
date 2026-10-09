@@ -3,7 +3,7 @@ Contributors: ventzie
 Tags: woocommerce, shipping, speedy, bulgaria, delivery
 Requires at least: 6.0
 Tested up to: 7.0
-Stable tag: 1.1.3
+Stable tag: 1.1.4
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -150,6 +150,11 @@ The plugin minimizes API calls through several strategies:
 * **Session storage** — Cart selections (city, delivery type, office) are stored in the WooCommerce session, so shipping calculations reuse the customer's choices without extra lookups.
 
 == Changelog ==
+
+= 1.1.4 =
+* Fixed: on shops that tax shipping, WooCommerce added its VAT on top of Speedy's price, which already contains VAT (Speedy's reply lists amount, VAT and total separately), so the customer paid the tax twice. The plugin now hands WooCommerce the net part; the customer sees exactly what Speedy bills.
+* Fixed: when Speedy refused or did not answer the very first quote of a session, the delivery was priced at 0.00 with nothing logged and no note — the order shipped free. Such a quote is now priced from the last quote of the session or from a new fallback table (to address, to office, to automat, per kg above 3 kg), the order carries a note with Speedy's answer, and the failure is logged.
+* Improved: when Speedy stops answering (timeout, refused connection), quotes pause for two minutes and the table prices the checkout meanwhile.
 
 = 1.1.3 =
 * New: when an order is placed but the delivery price could not be calculated (Speedy did not answer), the order is still accepted — you should not lose the sale — and an order note now tells you so, with the chosen office, so you see it in the order history before shipping. Previously such an order arrived with a 0.00 shipping line and nothing explaining why.
